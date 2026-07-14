@@ -2,10 +2,9 @@ site_name: Change Impact Analysis
 site_description: >-
   AI-powered change impact analysis — predict the downstream blast radius of a
   Databricks schema change across SQL/views and Tableau dashboards before deployment.
-# TODO: update these two URLs after creating the GitHub repository.
-site_url: https://priya-nidhi1.github.io/Impact_Analysis/
-repo_url: https://github.com/priya-nidhi1/Impact_Analysis
-repo_name: priya-nidhi1/Impact_Analysis
+site_url: https://priya-nidhi1.github.io/ImpactAnalysis/
+repo_url: https://github.com/priya-nidhi1/ImpactAnalysis
+repo_name: priya-nidhi1/ImpactAnalysis
 
 theme:
   name: material
