@@ -1,0 +1,49 @@
+site_name: Change Impact Analysis
+site_description: >-
+  AI-powered change impact analysis — predict the downstream blast radius of a
+  Databricks schema change across SQL/views and Tableau dashboards before deployment.
+# TODO: update these two URLs after creating the GitHub repository.
+site_url: https://ramesh299-git.github.io/Impact_Analysis/
+repo_url: https://github.com/ramesh299-git/Impact_Analysis
+repo_name: ramesh299-git/Impact_Analysis
+
+theme:
+  name: material
+  icon:
+    logo: material/magnify-scan
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.footer
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+
+nav:
+  - Home: index.md
+  - Live Demo: demo.md
+  - Architecture: ARCHITECTURE.md
+  - Dashboard & Integration: DASHBOARD.md
+  - Prototype Plan: prototype-plan.md
+  - Contributor Onboarding: AGENT_ONBOARDING.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg

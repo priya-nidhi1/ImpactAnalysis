@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Change Impact Analysis — Live Demo</title>
+<link rel="stylesheet" href="demo.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>🔎 Change Impact Analysis</h1>
+      <p class="tagline">What breaks <em>before</em> you deploy — across Databricks <span class="arrow">↔</span> Tableau</p>
+    </div>
+    <a class="docs-link" href="../">← Documentation</a>
+  </header>
+
+  <p class="badge-line" id="badge-line">Loading demo data…</p>
+
+  <section class="card note">
+    <strong>Every result on this page is real engine output</strong> — precomputed at build
+    time by running the deterministic impact engine (sqlglot column-level SQL parsing +
+    Tableau Metadata field graph, joined into one dependency graph) over the synthetic
+    sample fixtures. Nothing here is mocked or hand-written.
+  </section>
+
+  <section class="card controls-card">
+    <h2>Propose a schema change</h2>
+    <div class="controls">
+      <label>Column
+        <select id="column-select"></select>
+      </label>
+      <label>Change type
+        <select id="change-select"></select>
+      </label>
+    </div>
+  </section>
+
+  <div id="results" hidden>
+    <section class="tiles" id="tiles"></section>
+
+    <section class="card" id="safe-card" hidden>
+      <p class="safe">✅ No downstream dependents found — safe to deploy.</p>
+    </section>
+
+    <section class="card" id="table-card">
+      <h2>Impacted assets</h2>
+      <div class="table-scroll">
+        <table id="impact-table">
+          <thead>
+            <tr><th>Severity</th><th>System</th><th>Type</th><th>Asset</th><th>Why (dependency path)</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card" id="graph-card">
+      <h2>Dependency paths</h2>
+      <div class="legend" id="graph-legend"></div>
+      <div class="graph-scroll"><svg id="graph-svg" role="img" aria-label="Dependency path graph"></svg></div>
+    </section>
+
+    <section class="card" id="summary-card">
+      <h2>Impact summary</h2>
+      <div id="summary"></div>
+    </section>
+  </div>
+
+  <footer>
+    <details>
+      <summary>Engine accuracy on the labeled fixture set</summary>
+      <pre id="validation"></pre>
+    </details>
+    <p id="footer-meta"></p>
+  </footer>
+
+</div>
+<script src="demo.js"></script>
+</body>
+</html>

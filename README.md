@@ -7,6 +7,12 @@ Tableau dashboards, data sources, and calculated fields.
 > Ask *"What breaks if I rename `policy_status`?"* and get a graded, explainable
 > impact report instead of finding out from a broken dashboard after release.
 
+**📖 Docs & interactive demo:** <https://ramesh299-git.github.io/Impact_Analysis/> —
+a static site (MkDocs Material + a precomputed demo of the real engine) deployed
+from `main` by [`.github/workflows/pages.yml`](.github/workflows/pages.yml). Build it
+locally with `pip install mkdocs-material`, then
+`python scripts/export_demo_data.py && mkdocs serve`.
+
 ## Why this is trustworthy
 
 The **deterministic graph engine is the source of truth**:

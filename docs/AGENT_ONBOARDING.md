@@ -6,8 +6,8 @@
 
 ---
 
-You are taking over an **in-progress but working** prototype at
-`/Users/priyank/Desktop/RnD/Impact_Analysis`. Read this brief fully before editing.
+You are taking over an **in-progress but working** prototype (this repository).
+Read this brief fully before editing.
 When in doubt, run the tests and the validation script — they encode the intended
 behavior.
 
@@ -91,8 +91,9 @@ connectors (sample|live) → extract → unified nodes+edges ("dependency reposi
 ## 7. Run & verify
 
 ```bash
-cd /Users/priyank/Desktop/RnD/Impact_Analysis
-source .venv/bin/activate          # venv already exists with deps
+cd <repo-root>
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 pytest -q                          # 9 tests
 python scripts/validate.py         # precision/recall == 1.00
 streamlit run app/app.py           # dashboard

@@ -1,0 +1,58 @@
+name: Deploy demo + docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        # mkdocs pinned <2 — the 2.0 rewrite drops plugin/theme compatibility.
+        run: pip install -r requirements.txt "mkdocs-material>=9.5,<10" "mkdocs>=1.6,<2"
+
+      # Quality gate: the demo data is only as good as the engine, so a
+      # regression blocks the deploy.
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Validate precision/recall
+        run: python scripts/validate.py
+
+      - name: Precompute demo data
+        run: python scripts/export_demo_data.py
+
+      - name: Build site
+        run: mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
