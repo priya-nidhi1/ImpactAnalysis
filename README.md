@@ -7,7 +7,7 @@ Tableau dashboards, data sources, and calculated fields.
 > Ask *"What breaks if I rename `policy_status`?"* and get a graded, explainable
 > impact report instead of finding out from a broken dashboard after release.
 
-**📖 Docs & interactive demo:** <https://ramesh299-git.github.io/Impact_Analysis/> —
+**📖 Docs & interactive demo:** <https://priya-nidhi1.github.io/Impact_Analysis/> —
 a static site (MkDocs Material + a precomputed demo of the real engine) deployed
 from `main` by [`.github/workflows/pages.yml`](.github/workflows/pages.yml). Build it
 locally with `pip install mkdocs-material`, then
