@@ -8,7 +8,7 @@ ripples into **downstream SQL/views** and **Tableau dashboards, data sources, an
 fields**. Today impacts are found *after* deployment — broken dashboards, incidents, root-cause
 hunts, delayed releases. The process is reactive.
 
-**Goal of this prototype.** A *serious working prototype* that, given a proposed schema change
+**Goal of this prototype.** A *prototype* that, given a proposed schema change
 (e.g. "rename `policy_status`"), produces — **before deployment** — a concrete, trustworthy
 impact report listing the affected Databricks SQL/views and Tableau assets, plus a natural-language
 summary and remediation hints. The headline demo: *"What breaks if I rename `policy_status`?"* →
@@ -31,7 +31,7 @@ from chat — it never invents dependencies. This keeps results auditable.
 
 ---
 
-## Target Repo Layout (greenfield, under `/Users/priyank/Desktop/RnD/Impact_Analysis`)
+## Target Repo Layout (greenfield, under `~/ImpactAnalysis`)
 
 ```
 Impact_Analysis/

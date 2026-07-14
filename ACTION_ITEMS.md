@@ -27,7 +27,7 @@ and (D) demo readiness. Items are sized S (<½ day), M (½–2 days), L (2–5 d
       `git init`, commit the working baseline, push to GitHub/Azure DevOps (also a
       prerequisite for Databricks Git folders in Phase C).
 - [ ] **A4 (S) Fix stale paths in docs.** `docs/AGENT_ONBOARDING.md` and the plan doc
-      reference `/Users/priyank/Desktop/RnD/Impact_Analysis`; update to relative paths.
+      reference `~/ImpactAnalysis`; update to relative paths.
 
 **Exit criteria:** fresh clone + one venv + `pytest` green + app boots, on supported Python.
 
