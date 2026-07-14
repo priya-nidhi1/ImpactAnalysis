@@ -1,0 +1,32 @@
+# Change Impact Analysis — prototype configuration
+#
+# mode: "sample" runs entirely off the synthetic fixtures (no credentials).
+#       "live"   uses the Databricks + Tableau connectors.
+# Override at runtime with env var IMPACT_MODE=live.
+mode: sample
+
+# Target Databricks scope to analyze.
+catalogs:
+  - insurance
+schemas:
+  - policy
+default_catalog: insurance
+default_schema: policy
+sql_dialect: databricks
+
+fixtures_dir: fixtures
+
+tableau:
+  server: https://tableau.example.com
+  site: ""                       # default site
+  token_name: impact-analysis
+  secret_scope: impact_analysis  # Databricks secret scope holding the PAT secret
+
+mosaic_ai:
+  # Mosaic AI Foundation Model serving endpoint used for the summary + chat
+  # layer. Leave blank to use the deterministic offline fallback.
+  endpoint: databricks-dbrx-instruct
+
+storage:
+  metadata_schema: impact_analysis   # UC catalog.schema for Delta tables (live)
+  data_dir: .data                    # local JSON store (sample / off-cluster)

@@ -1,0 +1,13 @@
+# Core engine (required for tests + local sample-mode runs)
+sqlglot>=25.0.0
+networkx>=3.0
+pyyaml>=6.0
+pytest>=8.0.0
+
+# Connectors / live mode (Databricks-native)
+databricks-sdk>=0.30.0
+tableauserverclient>=0.30
+
+# UI (Databricks App)
+streamlit>=1.36
+pyvis>=0.3.2

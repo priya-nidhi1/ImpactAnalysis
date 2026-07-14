@@ -1,0 +1,55 @@
+{
+  "catalog": "insurance",
+  "schema": "policy",
+  "tables": [
+    {
+      "name": "policies",
+      "type": "TABLE",
+      "columns": [
+        {"name": "policy_id", "type": "string"},
+        {"name": "policy_status", "type": "string"},
+        {"name": "customer_id", "type": "string"},
+        {"name": "premium_amount", "type": "decimal(12,2)"},
+        {"name": "effective_date", "type": "date"},
+        {"name": "expiry_date", "type": "date"}
+      ]
+    },
+    {
+      "name": "claims",
+      "type": "TABLE",
+      "columns": [
+        {"name": "claim_id", "type": "string"},
+        {"name": "policy_id", "type": "string"},
+        {"name": "claim_amount", "type": "decimal(12,2)"},
+        {"name": "claim_status", "type": "string"}
+      ]
+    }
+  ],
+  "views": [
+    {
+      "name": "vw_active_policies",
+      "sql": "SELECT policy_id, policy_status, premium_amount FROM insurance.policy.policies WHERE policy_status = 'ACTIVE'"
+    },
+    {
+      "name": "vw_policy_summary",
+      "sql": "SELECT p.policy_id, p.policy_status, COUNT(c.claim_id) AS claim_count FROM insurance.policy.policies p LEFT JOIN insurance.policy.claims c ON p.policy_id = c.policy_id GROUP BY p.policy_id, p.policy_status"
+    },
+    {
+      "name": "vw_claims_by_policy",
+      "sql": "SELECT c.claim_id, c.policy_id, c.claim_amount FROM insurance.policy.claims c"
+    }
+  ],
+  "queries": [
+    {
+      "id": "q_status_breakdown",
+      "sql": "SELECT policy_status, COUNT(*) AS policy_count FROM insurance.policy.policies GROUP BY policy_status",
+      "source": "Tableau Server (extract refresh)"
+    },
+    {
+      "id": "q_premium_by_month",
+      "sql": "SELECT date_trunc('month', effective_date) AS month, SUM(premium_amount) AS total_premium FROM insurance.policy.policies GROUP BY 1",
+      "source": "Tableau Server (extract refresh)"
+    }
+  ],
+  "column_lineage": []
+}

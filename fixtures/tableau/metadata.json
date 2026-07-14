@@ -1,0 +1,46 @@
+{
+  "datasources": [
+    {
+      "name": "Policy Analytics",
+      "fields": [
+        {"name": "Policy Status", "upstreamColumns": [{"table": "insurance.policy.policies", "name": "policy_status"}]},
+        {"name": "Premium Amount", "upstreamColumns": [{"table": "insurance.policy.policies", "name": "premium_amount"}]},
+        {"name": "Policy Id", "upstreamColumns": [{"table": "insurance.policy.policies", "name": "policy_id"}]},
+        {"name": "Effective Date", "upstreamColumns": [{"table": "insurance.policy.policies", "name": "effective_date"}]}
+      ],
+      "calculatedFields": [
+        {"name": "Active Flag", "formula": "IF [Policy Status] = \"ACTIVE\" THEN 1 ELSE 0 END"},
+        {"name": "Status Label", "formula": "UPPER([Policy Status])"}
+      ]
+    },
+    {
+      "name": "Claims Analytics",
+      "fields": [
+        {"name": "Claim Id", "upstreamColumns": [{"table": "insurance.policy.claims", "name": "claim_id"}]},
+        {"name": "Claim Amount", "upstreamColumns": [{"table": "insurance.policy.claims", "name": "claim_amount"}]}
+      ],
+      "calculatedFields": []
+    }
+  ],
+  "workbooks": [
+    {
+      "name": "Policy Reporting",
+      "worksheets": [
+        {"name": "Status Breakdown", "datasource": "Policy Analytics", "fields": ["Policy Status", "Active Flag"]},
+        {"name": "Premium Trend", "datasource": "Policy Analytics", "fields": ["Premium Amount", "Effective Date"]}
+      ],
+      "dashboards": [
+        {"name": "Executive Policy Dashboard", "worksheets": ["Status Breakdown", "Premium Trend"]}
+      ]
+    },
+    {
+      "name": "Claims Reporting",
+      "worksheets": [
+        {"name": "Claims Volume", "datasource": "Claims Analytics", "fields": ["Claim Id", "Claim Amount"]}
+      ],
+      "dashboards": [
+        {"name": "Claims Overview", "worksheets": ["Claims Volume"]}
+      ]
+    }
+  ]
+}

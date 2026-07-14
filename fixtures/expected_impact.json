@@ -1,0 +1,35 @@
+{
+  "rename_policy_status": {
+    "description": "Rename insurance.policy.policies.policy_status — the headline scenario.",
+    "change": {
+      "target": "db:column:insurance.policy.policies.policy_status",
+      "change_type": "rename"
+    },
+    "expected_severity": "breaking",
+    "expected_assets": [
+      "db:view:insurance.policy.vw_active_policies",
+      "db:view:insurance.policy.vw_policy_summary",
+      "db:query:q_status_breakdown",
+      "tab:field:Policy Analytics.Policy Status",
+      "tab:calc:Policy Analytics.Active Flag",
+      "tab:calc:Policy Analytics.Status Label",
+      "tab:worksheet:Status Breakdown",
+      "tab:dashboard:Executive Policy Dashboard"
+    ]
+  },
+  "retype_premium_amount": {
+    "description": "Datatype change on premium_amount — a non-breaking warning scenario.",
+    "change": {
+      "target": "db:column:insurance.policy.policies.premium_amount",
+      "change_type": "retype"
+    },
+    "expected_severity": "warning",
+    "expected_assets": [
+      "db:view:insurance.policy.vw_active_policies",
+      "db:query:q_premium_by_month",
+      "tab:field:Policy Analytics.Premium Amount",
+      "tab:worksheet:Premium Trend",
+      "tab:dashboard:Executive Policy Dashboard"
+    ]
+  }
+}

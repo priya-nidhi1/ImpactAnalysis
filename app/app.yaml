@@ -1,0 +1,14 @@
+# Databricks App deploy config.
+# Deploy:  databricks apps deploy change-impact-analysis --source-code-path <repo>
+command:
+  - streamlit
+  - run
+  - app/app.py
+  - --server.port
+  - "8080"
+  - --server.address
+  - "0.0.0.0"
+
+env:
+  - name: IMPACT_MODE
+    value: "live"        # set to "sample" to demo without credentials
