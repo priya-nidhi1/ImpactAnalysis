@@ -1,0 +1,10 @@
+# Streamlit theme — keeps built-in widgets consistent with the app's own CSS.
+# Place at <repo>/.streamlit/config.toml
+#
+# `base` only sets the DEFAULT for Streamlit's own widgets. The app ships its
+# own Dark mode switch in the sidebar (Streamlit's native Settings → Theme does
+# not re-run the script, so custom CSS could not follow it); that switch drives
+# both the custom components and Streamlit's surfaces.
+[theme]
+base = "light"
+primaryColor = "#3d7de0"
