@@ -11,7 +11,10 @@
         {"name": "customer_id", "type": "string"},
         {"name": "premium_amount", "type": "decimal(12,2)"},
         {"name": "effective_date", "type": "date"},
-        {"name": "expiry_date", "type": "date"}
+        {"name": "expiry_date", "type": "date"},
+        {"name": "product_code", "type": "string"},
+        {"name": "agent_id", "type": "string"},
+        {"name": "underwriter_notes", "type": "string"}
       ]
     },
     {
@@ -21,7 +24,43 @@
         {"name": "claim_id", "type": "string"},
         {"name": "policy_id", "type": "string"},
         {"name": "claim_amount", "type": "decimal(12,2)"},
-        {"name": "claim_status", "type": "string"}
+        {"name": "claim_status", "type": "string"},
+        {"name": "claim_date", "type": "date"},
+        {"name": "loss_type", "type": "string"},
+        {"name": "adjuster_id", "type": "string"}
+      ]
+    },
+    {
+      "name": "payments",
+      "type": "TABLE",
+      "columns": [
+        {"name": "payment_id", "type": "string"},
+        {"name": "policy_id", "type": "string"},
+        {"name": "payment_amount", "type": "decimal(12,2)"},
+        {"name": "payment_date", "type": "date"},
+        {"name": "payment_method", "type": "string"},
+        {"name": "payment_status", "type": "string"}
+      ]
+    },
+    {
+      "name": "agents",
+      "type": "TABLE",
+      "columns": [
+        {"name": "agent_id", "type": "string"},
+        {"name": "agent_name", "type": "string"},
+        {"name": "region", "type": "string"},
+        {"name": "channel", "type": "string"},
+        {"name": "hire_date", "type": "date"}
+      ]
+    },
+    {
+      "name": "products",
+      "type": "TABLE",
+      "columns": [
+        {"name": "product_code", "type": "string"},
+        {"name": "product_name", "type": "string"},
+        {"name": "line_of_business", "type": "string"},
+        {"name": "is_active", "type": "boolean"}
       ]
     }
   ],
@@ -37,6 +76,30 @@
     {
       "name": "vw_claims_by_policy",
       "sql": "SELECT c.claim_id, c.policy_id, c.claim_amount FROM insurance.policy.claims c"
+    },
+    {
+      "name": "vw_open_claims",
+      "sql": "SELECT c.claim_id, c.policy_id, c.claim_amount, c.claim_status, c.claim_date FROM insurance.policy.claims c WHERE c.claim_status IN ('OPEN', 'PENDING')"
+    },
+    {
+      "name": "vw_policy_revenue",
+      "sql": "SELECT p.policy_id, p.premium_amount, SUM(pay.payment_amount) AS collected FROM insurance.policy.policies p LEFT JOIN insurance.policy.payments pay ON p.policy_id = pay.policy_id GROUP BY p.policy_id, p.premium_amount"
+    },
+    {
+      "name": "vw_agent_performance",
+      "sql": "SELECT a.agent_id, a.agent_name, a.region, SUM(p.premium_amount) AS written_premium FROM insurance.policy.policies p JOIN insurance.policy.agents a ON p.agent_id = a.agent_id GROUP BY a.agent_id, a.agent_name, a.region"
+    },
+    {
+      "name": "vw_product_mix",
+      "sql": "SELECT pr.line_of_business, pr.product_name, COUNT(p.policy_id) AS policy_count FROM insurance.policy.policies p JOIN insurance.policy.products pr ON p.product_code = pr.product_code GROUP BY pr.line_of_business, pr.product_name"
+    },
+    {
+      "name": "vw_claims_ratio",
+      "sql": "SELECT p.policy_id, p.premium_amount, SUM(c.claim_amount) AS incurred FROM insurance.policy.policies p LEFT JOIN insurance.policy.claims c ON p.policy_id = c.policy_id GROUP BY p.policy_id, p.premium_amount"
+    },
+    {
+      "name": "vw_payment_health",
+      "sql": "SELECT pay.payment_status, pay.payment_method, COUNT(pay.payment_id) AS payments, SUM(pay.payment_amount) AS amount FROM insurance.policy.payments pay GROUP BY pay.payment_status, pay.payment_method"
     }
   ],
   "queries": [
@@ -49,6 +112,26 @@
       "id": "q_premium_by_month",
       "sql": "SELECT date_trunc('month', effective_date) AS month, SUM(premium_amount) AS total_premium FROM insurance.policy.policies GROUP BY 1",
       "source": "Tableau Server (extract refresh)"
+    },
+    {
+      "id": "q_claims_by_loss_type",
+      "sql": "SELECT c.loss_type, COUNT(c.claim_id) AS claims, SUM(c.claim_amount) AS amount FROM insurance.policy.claims c GROUP BY c.loss_type",
+      "source": "Tableau Server (extract refresh)"
+    },
+    {
+      "id": "q_agent_leaderboard",
+      "sql": "SELECT a.agent_name, a.channel, SUM(p.premium_amount) AS premium FROM insurance.policy.policies p JOIN insurance.policy.agents a ON p.agent_id = a.agent_id GROUP BY a.agent_name, a.channel",
+      "source": "Databricks SQL Warehouse (scheduled)"
+    },
+    {
+      "id": "q_payment_method_mix",
+      "sql": "SELECT pay.payment_method, COUNT(pay.payment_id) AS payments FROM insurance.policy.payments pay GROUP BY pay.payment_method",
+      "source": "Tableau Server (extract refresh)"
+    },
+    {
+      "id": "q_product_performance",
+      "sql": "SELECT pr.product_name, SUM(p.premium_amount) AS premium FROM insurance.policy.policies p JOIN insurance.policy.products pr ON p.product_code = pr.product_code GROUP BY pr.product_name",
+      "source": "Databricks SQL Warehouse (scheduled)"
     }
   ],
   "column_lineage": []

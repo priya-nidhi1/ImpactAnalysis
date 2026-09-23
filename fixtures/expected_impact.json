@@ -14,11 +14,12 @@
       "tab:calc:Policy Analytics.Active Flag",
       "tab:calc:Policy Analytics.Status Label",
       "tab:worksheet:Status Breakdown",
+      "tab:worksheet:Renewal Pipeline",
       "tab:dashboard:Executive Policy Dashboard"
     ]
   },
   "retype_premium_amount": {
-    "description": "Datatype change on premium_amount — a non-breaking warning scenario.",
+    "description": "Datatype change on premium_amount — non-breaking; reaches no calculated field.",
     "change": {
       "target": "db:column:insurance.policy.policies.premium_amount",
       "change_type": "retype"
@@ -26,10 +27,113 @@
     "expected_severity": "warning",
     "expected_assets": [
       "db:view:insurance.policy.vw_active_policies",
+      "db:view:insurance.policy.vw_policy_revenue",
+      "db:view:insurance.policy.vw_agent_performance",
+      "db:view:insurance.policy.vw_claims_ratio",
       "db:query:q_premium_by_month",
+      "db:query:q_agent_leaderboard",
+      "db:query:q_product_performance",
       "tab:field:Policy Analytics.Premium Amount",
       "tab:worksheet:Premium Trend",
       "tab:dashboard:Executive Policy Dashboard"
     ]
+  },
+  "drop_claim_status": {
+    "description": "Drop claims.claim_status — a narrow but breaking blast radius.",
+    "change": {
+      "target": "db:column:insurance.policy.claims.claim_status",
+      "change_type": "drop"
+    },
+    "expected_severity": "breaking",
+    "expected_assets": [
+      "db:view:insurance.policy.vw_open_claims",
+      "tab:field:Claims Analytics.Claim Status",
+      "tab:worksheet:Claims Volume",
+      "tab:dashboard:Claims Overview"
+    ]
+  },
+  "retype_claim_amount": {
+    "description": "Datatype change reaching a Tableau calculated field — severity escalates to breaking on 'Large Claim Flag' while everything else stays a warning.",
+    "change": {
+      "target": "db:column:insurance.policy.claims.claim_amount",
+      "change_type": "retype"
+    },
+    "expected_severity": "warning (breaking on calculated fields)",
+    "expected_assets": [
+      "db:view:insurance.policy.vw_claims_by_policy",
+      "db:view:insurance.policy.vw_open_claims",
+      "db:view:insurance.policy.vw_claims_ratio",
+      "db:query:q_claims_by_loss_type",
+      "tab:field:Claims Analytics.Claim Amount",
+      "tab:calc:Claims Analytics.Large Claim Flag",
+      "tab:worksheet:Claims Volume",
+      "tab:worksheet:Large Claims",
+      "tab:dashboard:Claims Overview",
+      "tab:dashboard:Claims Risk Review"
+    ]
+  },
+  "logic_change_policy_status": {
+    "description": "Transformation-logic change on policy_status — same reach as a rename, graded warning.",
+    "change": {
+      "target": "db:column:insurance.policy.policies.policy_status",
+      "change_type": "logic"
+    },
+    "expected_severity": "warning",
+    "expected_assets": [
+      "db:view:insurance.policy.vw_active_policies",
+      "db:view:insurance.policy.vw_policy_summary",
+      "db:query:q_status_breakdown",
+      "tab:field:Policy Analytics.Policy Status",
+      "tab:calc:Policy Analytics.Active Flag",
+      "tab:calc:Policy Analytics.Status Label",
+      "tab:worksheet:Status Breakdown",
+      "tab:worksheet:Renewal Pipeline",
+      "tab:dashboard:Executive Policy Dashboard"
+    ]
+  },
+  "drop_table_claims": {
+    "description": "Table-level change: dropping claims fans out through every one of its columns.",
+    "change": {
+      "target": "db:table:insurance.policy.claims",
+      "change_type": "drop"
+    },
+    "expected_severity": "breaking",
+    "expected_assets": [
+      "db:view:insurance.policy.vw_policy_summary",
+      "db:view:insurance.policy.vw_claims_by_policy",
+      "db:view:insurance.policy.vw_open_claims",
+      "db:view:insurance.policy.vw_claims_ratio",
+      "db:query:q_claims_by_loss_type",
+      "tab:field:Claims Analytics.Claim Id",
+      "tab:field:Claims Analytics.Claim Amount",
+      "tab:field:Claims Analytics.Claim Status",
+      "tab:field:Claims Analytics.Loss Type",
+      "tab:field:Claims Analytics.Claim Date",
+      "tab:calc:Claims Analytics.Large Claim Flag",
+      "tab:calc:Claims Analytics.Loss Category",
+      "tab:worksheet:Claims Volume",
+      "tab:worksheet:Loss Type Mix",
+      "tab:worksheet:Large Claims",
+      "tab:dashboard:Claims Overview",
+      "tab:dashboard:Claims Risk Review"
+    ]
+  },
+  "no_impact_customer_id": {
+    "description": "policies.customer_id is not consumed downstream — the safe-to-deploy path.",
+    "change": {
+      "target": "db:column:insurance.policy.policies.customer_id",
+      "change_type": "rename"
+    },
+    "expected_severity": "none",
+    "expected_assets": []
+  },
+  "add_new_column": {
+    "description": "Adding a column that does not exist yet has no existing dependents.",
+    "change": {
+      "target": "db:column:insurance.policy.policies.risk_score",
+      "change_type": "add"
+    },
+    "expected_severity": "none",
+    "expected_assets": []
   }
 }
