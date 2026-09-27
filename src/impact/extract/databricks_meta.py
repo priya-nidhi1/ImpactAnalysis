@@ -48,7 +48,10 @@ def extract_databricks(raw: RawMetadata) -> Tuple[List[Node], List[Edge]]:
                 name=f"{schema}.{tname}",
                 system=System.DATABRICKS,
                 properties={"catalog": catalog, "schema": schema,
-                            "table_type": t.get("type", "TABLE")},
+                            "table_type": t.get("type", "TABLE"),
+                            # optional CTAS / pipeline definition, shown as the
+                            # table's calculation logic in impact evidence
+                            **({"sql": t["definition"]} if t.get("definition") else {})},
             )
         )
         for c in t.get("columns", []):

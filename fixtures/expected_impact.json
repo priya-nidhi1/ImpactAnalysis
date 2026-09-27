@@ -13,10 +13,24 @@
       "tab:field:Policy Analytics.Policy Status",
       "tab:calc:Policy Analytics.Active Flag",
       "tab:calc:Policy Analytics.Status Label",
+      "tab:field:Policy Analytics.Renewal Eligibility",
+      "tab:calc:Policy Analytics.Renewal Eligible Flag",
       "tab:worksheet:Status Breakdown",
       "tab:worksheet:Renewal Pipeline",
       "tab:dashboard:Executive Policy Dashboard"
-    ]
+    ],
+    "expected_governance": {
+      "rating": "high",
+      "cdes": [
+        "Policy status",
+        "Renewal eligibility"
+      ],
+      "downstream_tables": 8,
+      "core_tables": 2,
+      "critical_reports": [
+        "Executive Policy Dashboard"
+      ]
+    }
   },
   "retype_premium_amount": {
     "description": "Datatype change on premium_amount — non-breaking; reaches no calculated field.",
@@ -36,7 +50,18 @@
       "tab:field:Policy Analytics.Premium Amount",
       "tab:worksheet:Premium Trend",
       "tab:dashboard:Executive Policy Dashboard"
-    ]
+    ],
+    "expected_governance": {
+      "rating": "medium",
+      "cdes": [
+        "Premium amount"
+      ],
+      "downstream_tables": 0,
+      "core_tables": 0,
+      "critical_reports": [
+        "Executive Policy Dashboard"
+      ]
+    }
   },
   "drop_claim_status": {
     "description": "Drop claims.claim_status — a narrow but breaking blast radius.",
@@ -50,7 +75,14 @@
       "tab:field:Claims Analytics.Claim Status",
       "tab:worksheet:Claims Volume",
       "tab:dashboard:Claims Overview"
-    ]
+    ],
+    "expected_governance": {
+      "rating": "medium",
+      "cdes": [],
+      "downstream_tables": 0,
+      "core_tables": 0,
+      "critical_reports": []
+    }
   },
   "retype_claim_amount": {
     "description": "Datatype change reaching a Tableau calculated field — severity escalates to breaking on 'Large Claim Flag' while everything else stays a warning.",
@@ -86,10 +118,24 @@
       "tab:field:Policy Analytics.Policy Status",
       "tab:calc:Policy Analytics.Active Flag",
       "tab:calc:Policy Analytics.Status Label",
+      "tab:field:Policy Analytics.Renewal Eligibility",
+      "tab:calc:Policy Analytics.Renewal Eligible Flag",
       "tab:worksheet:Status Breakdown",
       "tab:worksheet:Renewal Pipeline",
       "tab:dashboard:Executive Policy Dashboard"
-    ]
+    ],
+    "expected_governance": {
+      "rating": "high",
+      "cdes": [
+        "Policy status",
+        "Renewal eligibility"
+      ],
+      "downstream_tables": 8,
+      "core_tables": 2,
+      "critical_reports": [
+        "Executive Policy Dashboard"
+      ]
+    }
   },
   "drop_table_claims": {
     "description": "Table-level change: dropping claims fans out through every one of its columns.",
@@ -125,7 +171,14 @@
       "change_type": "rename"
     },
     "expected_severity": "none",
-    "expected_assets": []
+    "expected_assets": [],
+    "expected_governance": {
+      "rating": "low",
+      "cdes": [],
+      "downstream_tables": 0,
+      "core_tables": 0,
+      "critical_reports": []
+    }
   },
   "add_new_column": {
     "description": "Adding a column that does not exist yet has no existing dependents.",

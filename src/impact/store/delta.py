@@ -21,7 +21,8 @@ from typing import Any, Dict, List, Optional
 from ..config import Settings
 from ..model import Edge, Node
 
-_COLLECTIONS = ("nodes", "edges", "change_requests", "impact_results")
+_COLLECTIONS = ("nodes", "edges", "change_requests", "impact_results",
+                "impact_assessments")
 
 
 class MetadataStore(ABC):

@@ -48,12 +48,13 @@ walk from the changed node. See [`src/impact/model.py`](src/impact/model.py).
 
 | Path | What |
 |------|------|
-| [`src/impact/`](src/impact) | the engine (model, connectors, extract, graph, ai, store, pipeline) |
+| [`src/impact/`](src/impact) | the engine (model, connectors, extract, graph, governance, ai, store, pipeline) |
 | [`fixtures/`](fixtures) | synthetic insurance "policy" metadata + labeled expected impact |
+| [`fixtures/governance/catalog.json`](fixtures/governance/catalog.json) | governance overlay: CDEs, table tiers, critical reports, rating rules |
 | [`notebooks/`](notebooks) | Databricks notebooks `00`→`40` |
 | [`app/`](app) | Streamlit Databricks App |
 | [`scripts/validate.py`](scripts/validate.py) | precision/recall harness |
-| [`tests/`](tests) | sqlglot + impact-engine tests |
+| [`tests/`](tests) | sqlglot + impact-engine + governance tests |
 
 ## Run it locally (sample mode, no credentials)
 
@@ -63,8 +64,58 @@ pip install -r requirements.txt
 
 pytest -q                       # 1. unit + end-to-end tests
 python scripts/validate.py      # 2. precision/recall on labeled fixtures
-streamlit run app/app.py        # 3. the UI (Propose Change + Chat tabs)
+streamlit run app/app_revamped.py  # 3. the UI (Propose Change + Chat)
 ```
+
+## Governance: critical data elements and impact rating
+
+Every change is also rolled up into a governance view, so you can trace a field
+change through data products to critical business reporting
+([`src/impact/governance/`](src/impact/governance)):
+
+| Output | How it is derived |
+|---|---|
+| **Critical data elements** | CDEs bound to the changed field or to anything downstream of it. A CDE is a business concept (e.g. *Policy status*) that can span many physical assets. |
+| **Downstream tables** | Distinct tables whose columns derive from the field (`column_lineage` → `derives_from` edges), excluding the source table. |
+| **Core tables** | The downstream tables tagged `core`. The rest are *derived*. |
+| **Critical reports** | Reached dashboards classified `critical`. |
+| **Layered flow** | Source field → data products (core / derived) → reporting components (views & semantic fields, CDE calculations, worksheets) → business reports. |
+| **Impact rating** | **High**: the change is breaking and ≥ 2 dimensions are flagged, or it is breaking and reaches a critical report, or all three dimensions are flagged. **Medium**: any dimension is flagged, or the change is breaking. **Low**: otherwise. The three dimensions are *CDE criticality*, *Core data dependency* and *Critical reporting*. Thresholds live in the overlay's `rules` block. |
+| **Review focus** | Confirm CDE mappings and ownership / validate dependency paths / test affected reporting logic, plus the owners and stewards to consult. |
+
+Classifications resolve in this order: **1. governance overlay** (`governance.overlay`
+in `config/settings.yaml`, versioned with the code), then **2. Unity Catalog tags** on
+tables and columns (`cde=<CDE name>`, `data_tier=core|derived`,
+`criticality=critical`, `data_owner=<owner>`; read from
+`information_schema.table_tags` / `column_tags` in live mode), then **3. inference**:
+a table with inbound column lineage is `derived`. The UI footnote reports how many
+classifications came from each source.
+
+### Line numbers, calculation logic and reports
+
+Every impacted asset carries a hop-by-hop **evidence trail**
+([`src/impact/evidence.py`](src/impact/evidence.py)). Each hop shows the view or query
+SQL, the derived table's definition (the optional `definition` on a table in the raw
+metadata) or the Tableau formula, with the **line numbers that reference the changed
+field** highlighted. Line numbers come from sqlglot token positions, resolved through
+table aliases. In the app, open **Calculation logic** on any asset row or table under
+**Data product logic**.
+
+**Download report** (below the KPI tiles) offers two files
+([`src/impact/report.py`](src/impact/report.py)):
+- **PDF**: the rating, KPIs, flow, data-product logic and every asset's line-numbered
+  code with the referencing lines highlighted. It is an HTML template rendered by
+  **WeasyPrint**, falling back to pure-Python **xhtml2pdf** where WeasyPrint's Pango
+  system library is missing (e.g. a minimal container). Force one with
+  `IMPACT_PDF_ENGINE=weasyprint|xhtml2pdf`
+  ([`src/impact/report_pdf.py`](src/impact/report_pdf.py));
+- **CSV**: one row per asset, with CDEs, critical-report flag and line locations.
+
+In the sample fixtures, renaming `policies.policy_status` touches **2 CDEs** (*Policy
+status*, *Renewal eligibility*) and **8 downstream tables**, **2 of them core** (*Policy
+master*, *Policy term*). It reaches **1 critical report** (*Executive Policy Dashboard*)
+and is rated **High impact**. `scripts/validate.py` checks these roll-ups against
+`expected_governance` in [`fixtures/expected_impact.json`](fixtures/expected_impact.json).
 
 ## Run it in Databricks (live mode)
 
@@ -80,14 +131,17 @@ streamlit run app/app.py        # 3. the UI (Propose Change + Chat tabs)
 1. **Frame it:** "A developer wants to rename `policy_status`. Today they trace impact
    by hand for hours and still miss Tableau." Open the app (Mode badge shows asset/dependency counts).
 2. **Chat tab:** type *"What will be impacted if I rename policy_status?"* → it interprets
-   the change and returns **8 breaking assets** spanning **3 Databricks** objects and
-   **5 Tableau** objects, each with a *why* path
+   the change and returns **11 breaking assets** spanning **3 Databricks** objects and
+   **8 Tableau** objects, each with a *why* path
    (`policies.policy_status → Policy Status → Status Breakdown → Executive Policy Dashboard`).
-3. **Contrast:** pick `premium_amount` + **retype** → a smaller **warning** set — the engine
+3. **Governance:** the same result opens with a **High impact** rating: **2 CDEs**, **8
+   downstream tables (2 core)** and **1 critical report**, laid out as source field →
+   data products → reporting components → Executive Policy Dashboard, with a review focus.
+4. **Contrast:** pick `premium_amount` + **retype** → a smaller **warning** set — the engine
    distinguishes breaking from non-breaking changes.
-4. **Credibility:** `python scripts/validate.py` → **precision 1.00 / recall 1.00** on the
+5. **Credibility:** `python scripts/validate.py` → **precision 1.00 / recall 1.00** on the
    labeled set. Time-to-analysis: **< 5 minutes vs 2–6 hours** manual.
-5. **Close:** same engine runs live in Databricks; AI summary is additive on top of an
+6. **Close:** same engine runs live in Databricks; AI summary is additive on top of an
    auditable deterministic core.
 
 ## Scope (v1) and what's next

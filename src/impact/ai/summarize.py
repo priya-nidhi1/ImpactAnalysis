@@ -48,6 +48,10 @@ def _structured_text(change: ChangeRequest, results: List[ImpactResult]) -> str:
             f"- [{r.severity.value.upper()}] {r.system.value}:{r.asset_type.value} "
             f"'{r.asset_name}'  via  {r.reason}"
         )
+        # Where the dependency lives in code, so remediation can cite lines.
+        for ev in r.evidence:
+            if ev.get("lines"):
+                lines.append(f"    at {ev['object']} lines {ev['lines']}")
     return "\n".join(lines)
 
 

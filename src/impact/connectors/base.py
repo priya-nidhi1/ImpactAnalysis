@@ -9,7 +9,8 @@ Raw metadata shape
 ------------------
 ``get_databricks_metadata()`` -> {
     "catalog": str, "schema": str,
-    "tables":  [{"name", "type", "columns": [{"name", "type"}]}],
+    "tables":  [{"name", "type", "tags"?, "definition"?,
+                 "columns": [{"name", "type", "tags"?}]}],
     "views":   [{"name", "sql"}],
     "queries": [{"id", "sql", "source"}],
     "column_lineage": [{"source", "target"}]   # optional fq column->column
@@ -19,8 +20,12 @@ Raw metadata shape
     "datasources": [{"name", "fields": [{"name", "upstreamColumns":[{"table","name"}]}],
                      "calculatedFields": [{"name", "formula"}]}],
     "workbooks":   [{"name", "worksheets": [{"name","datasource","fields":[...]}],
-                     "dashboards": [{"name","worksheets":[...]}]}]
+                     "dashboards": [{"name","worksheets":[...], "tags"?}]}]
 }
+
+``tags`` are optional ``{key: value}`` governance tags (Unity Catalog table /
+column tags, Tableau tags): ``cde``, ``data_tier``, ``criticality``,
+``data_owner``. See :mod:`impact.governance.load`.
 """
 
 from __future__ import annotations

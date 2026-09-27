@@ -1,0 +1,82 @@
+{
+  "_comment": "Governance overlay: critical data elements (CDEs), table tiers and report criticality. Values here take precedence over Unity Catalog tags (cde, data_tier, criticality, data_owner); anything unset falls back to tags, then to inference from lineage.",
+  "cdes": [
+    {
+      "id": "cde.policy_status",
+      "name": "Policy status",
+      "domain": "Policy",
+      "definition": "Lifecycle state of a policy (e.g. ACTIVE, LAPSED, CANCELLED) as of the latest term.",
+      "owner": "Head of Policy Administration",
+      "steward": "Policy Data Steward",
+      "criticality": "high",
+      "assets": [
+        "db:column:insurance.policy.policies.policy_status",
+        "db:column:insurance.policy.policy_master.policy_status",
+        "tab:field:Policy Analytics.Policy Status"
+      ]
+    },
+    {
+      "id": "cde.renewal_eligibility",
+      "name": "Renewal eligibility",
+      "domain": "Policy",
+      "definition": "Whether a policy qualifies for renewal at the end of its current term.",
+      "owner": "Head of Retention",
+      "steward": "Renewals Data Steward",
+      "criticality": "high",
+      "assets": [
+        "db:column:insurance.policy.renewal_eligibility.is_eligible",
+        "tab:calc:Policy Analytics.Renewal Eligible Flag"
+      ]
+    },
+    {
+      "id": "cde.premium_amount",
+      "name": "Premium amount",
+      "domain": "Finance",
+      "definition": "Written premium for the policy term, in policy currency.",
+      "owner": "Chief Actuary",
+      "steward": "Finance Data Steward",
+      "criticality": "high",
+      "assets": [
+        "db:column:insurance.policy.policies.premium_amount",
+        "tab:field:Policy Analytics.Premium Amount"
+      ]
+    },
+    {
+      "id": "cde.claim_amount",
+      "name": "Claim amount",
+      "domain": "Claims",
+      "definition": "Incurred amount for a claim, net of recoveries.",
+      "owner": "Head of Claims",
+      "steward": "Claims Data Steward",
+      "criticality": "high",
+      "assets": [
+        "db:column:insurance.policy.claims.claim_amount",
+        "tab:field:Claims Analytics.Claim Amount"
+      ]
+    }
+  ],
+  "assets": {
+    "db:table:insurance.policy.policy_master": {
+      "tier": "core",
+      "label": "Policy master",
+      "owner": "Policy Data Office"
+    },
+    "db:table:insurance.policy.policy_term": {
+      "label": "Policy term"
+    },
+    "tab:dashboard:Executive Policy Dashboard": {
+      "criticality": "critical",
+      "owner": "Chief Operating Officer"
+    },
+    "tab:dashboard:Finance Collections Dashboard": {
+      "criticality": "critical",
+      "owner": "Chief Financial Officer"
+    }
+  },
+  "rules": {
+    "high_min_dimensions": 2,
+    "high_on_breaking_critical_report": true,
+    "high_on_all_dimensions": true,
+    "medium_min_dimensions": 1
+  }
+}

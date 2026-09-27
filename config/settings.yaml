@@ -16,6 +16,12 @@ sql_dialect: databricks
 
 fixtures_dir: fixtures
 
+governance:
+  # Curated CDEs, table tiers (core/derived) and report criticality. Values
+  # here override Unity Catalog tags (cde, data_tier, criticality, data_owner);
+  # anything left unset falls back to tags, then to inference from lineage.
+  overlay: fixtures/governance/catalog.json
+
 tableau:
   server: https://tableau.example.com
   site: ""                       # default site

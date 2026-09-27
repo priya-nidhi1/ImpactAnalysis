@@ -25,9 +25,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from impact.ai.nl_change import parse_nl_change  # noqa: E402
 from impact.ai.summarize import summarize_impact  # noqa: E402
 from impact.config import load_settings  # noqa: E402
+from impact.governance import assess_impact  # noqa: E402
 from impact.graph import analyze_change  # noqa: E402
 from impact.model import ChangeRequest, ChangeType, NodeType, Severity  # noqa: E402
 from impact.pipeline import build_graph_in_memory  # noqa: E402
+from impact.report import (  # noqa: E402
+    PROVENANCE_LABEL,
+    code_block_html,
+    evidence_html,
+    line_refs,
+    report_basename,
+    results_csv,
+)
+from impact.report_pdf import pdf_engine, report_pdf  # noqa: E402
 
 st.set_page_config(
     page_title="Change Impact Analysis",
@@ -324,6 +334,133 @@ footer{{visibility:hidden;}}
 """
 st.markdown(THEME, unsafe_allow_html=True)
 
+# Governance view (CDEs, core data, critical reports). Plain string, not an
+# f-string: it only uses the tokens defined above, so no brace escaping.
+GOVERNANCE_CSS = """
+<style>
+/* ---- selected-change banner ---- */
+.ca-change{display:grid;grid-template-columns:auto 1fr auto;gap:1.2rem;
+  align-items:center;border:1px solid var(--line);border-radius:10px;
+  background:var(--surface-2);padding:.85rem 1.2rem;}
+.ca-change-l{font-family:var(--mono);font-size:.65rem;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);}
+.ca-change-v{font-family:var(--mono);font-size:.95rem;font-weight:650;
+  letter-spacing:.04em;color:var(--ink);text-transform:uppercase;
+  display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;}
+.ca-change-v small{font-size:.72rem;font-weight:500;color:var(--ink-3);
+  text-transform:none;letter-spacing:0;}
+.ca-pill{font-family:var(--mono);font-size:.66rem;font-weight:700;
+  letter-spacing:.11em;text-transform:uppercase;border-radius:99px;
+  padding:.28rem .7rem;border:1px solid currentColor;white-space:nowrap;
+  justify-self:start;}
+.ca-pill.high,.ca-rt.high{color:var(--breaking);}
+.ca-pill.medium,.ca-rt.medium{color:var(--warning);}
+.ca-pill.low,.ca-rt.low{color:var(--safe);}
+.chip.cde{color:var(--info);border-color:var(--info);}
+.chip.crit{color:var(--breaking);border-color:var(--breaking);}
+.chip.core{color:var(--ink);border-color:var(--ink-3);}
+
+/* ---- KPI strip ---- */
+.ca-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;}
+.ca-kpi{border:1px solid var(--line);border-radius:10px;background:var(--surface);
+  padding:.95rem 1.1rem;}
+.ca-kpi-h{display:flex;align-items:baseline;gap:.7rem;}
+.ca-kpi-n{font-size:1.9rem;font-weight:640;line-height:1;color:var(--ink);
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+.ca-kpi-t{font-size:.86rem;font-weight:640;color:var(--ink);}
+.ca-kpi-s{font-size:.78rem;color:var(--ink-3);margin-top:.55rem;line-height:1.45;}
+
+/* ---- layered downstream flow ---- */
+.ca-flow{display:grid;grid-template-columns:1fr 22px 1.25fr 22px 1.25fr 22px 1.05fr;
+  align-items:stretch;border:1px solid var(--line);border-radius:10px;
+  background:var(--surface);padding:1rem 1.1rem;}
+.ca-fcol{display:flex;flex-direction:column;gap:.55rem;justify-content:center;min-width:0;}
+.ca-fhead{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:.1rem;}
+.ca-flow .ca-fhead{margin-bottom:.55rem;}
+.ca-farrow{display:flex;align-items:center;justify-content:center;color:var(--ink-3);
+  font-size:.9rem;}
+.ca-fcard{border:1px solid var(--line);border-radius:8px;background:var(--surface-2);
+  padding:.6rem .75rem;min-width:0;}
+.ca-fcard .t{font-size:.86rem;font-weight:640;color:var(--ink);line-height:1.3;}
+.ca-fcard .s{font-size:.74rem;color:var(--ink-2);line-height:1.4;margin-top:.2rem;
+  word-break:break-word;}
+.ca-fcard .k{font-family:var(--mono);font-size:.58rem;font-weight:600;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);margin-bottom:.2rem;}
+.ca-fcard.src{border-left:3px solid var(--warning);background:var(--surface);}
+.ca-fcard.cdecalc{border-color:var(--info);}
+.ca-fcard.muted{opacity:.6;}
+.ca-fcard.critical{background:var(--ink);border-color:var(--ink);}
+.ca-fcard.critical .t{color:var(--app);font-size:.98rem;}
+.ca-fcard.critical .k, .ca-fcard.critical .s{color:var(--app);opacity:.75;}
+
+/* ---- assessment ---- */
+.ca-assess{display:grid;grid-template-columns:.8fr 1fr 1fr 1fr;border:1px solid var(--line);
+  border-radius:10px;background:var(--surface-2);overflow:hidden;}
+.ca-assess > div{padding:.95rem 1.1rem;border-right:1px solid var(--line-soft);}
+.ca-assess > div:last-child{border-right:none;}
+.ca-rt{font-family:var(--mono);font-size:.82rem;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;}
+.ca-rs{font-size:.76rem;color:var(--ink-3);margin-top:.35rem;}
+.ca-dim-n{font-size:.88rem;font-weight:640;color:var(--ink);display:flex;
+  align-items:center;gap:.45rem;margin-bottom:.3rem;}
+.ca-dim-d{font-size:.8rem;color:var(--ink-2);line-height:1.45;}
+.ca-focus{font-size:.88rem;color:var(--ink-2);margin:.8rem 0 .25rem;line-height:1.5;}
+.ca-focus b{color:var(--ink);}
+.ca-foot{font-size:.7rem;color:var(--ink-3);line-height:1.5;}
+
+/* ---- calculation logic (collapsible, line-numbered) ---- */
+.ca-logic{margin-top:.55rem;}
+.ca-logic summary{cursor:pointer;font-family:var(--mono);font-size:.66rem;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);list-style:none;
+  display:inline-flex;gap:.5rem;align-items:center;}
+.ca-logic summary::-webkit-details-marker{display:none;}
+.ca-logic summary::before{content:"▸";transition:transform .15s;}
+.ca-logic[open] summary::before{transform:rotate(90deg);}
+.ca-logic summary .lr{color:var(--warning);letter-spacing:.04em;}
+.ca-logic .hop{display:flex;gap:.5rem;align-items:baseline;margin:.7rem 0 .3rem;
+  font-size:.8rem;}
+.ca-logic .hop-n{font-family:var(--mono);font-size:.66rem;color:var(--ink-3);}
+.ca-logic .hop-t{color:var(--ink);font-weight:600;}
+.ca-logic .hop-l{font-family:var(--mono);font-size:.7rem;color:var(--warning);
+  margin-left:auto;white-space:nowrap;}
+.ca-logic .map{font-family:var(--mono);font-size:.74rem;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:6px;padding:.3rem .6rem;color:var(--ink-2);}
+.ca-logic .note{font-size:.72rem;color:var(--ink-3);margin-top:.2rem;}
+table.ca-code{width:100%;border-collapse:collapse;font:.74rem/1.55 var(--mono);
+  background:var(--surface-2);border:1px solid var(--line);border-radius:6px;margin:0;}
+table.ca-code td{padding:0 .6rem;border:none;white-space:pre-wrap;word-break:break-word;
+  color:var(--ink-2);}
+table.ca-code td.ln{width:1%;min-width:2.4em;white-space:nowrap;text-align:right;color:var(--ink-3);user-select:none;
+  border-right:1px solid var(--line);}
+table.ca-code tr.hit td{background:color-mix(in srgb,var(--warning) 16%,transparent);
+  color:var(--ink);}
+table.ca-code tr.hit td.ln{color:var(--warning);font-weight:700;
+  box-shadow:inset 3px 0 var(--warning);}
+.ca-tlogic{border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  padding:.55rem .85rem;margin-bottom:.45rem;}
+.ca-tlogic .ca-logic{margin-top:0;}
+.ca-tlogic summary .tn{color:var(--ink);text-transform:none;letter-spacing:0;
+  font-family:-apple-system,sans-serif;font-size:.86rem;font-weight:640;}
+.ca-tlogic table.ca-code{margin-top:.5rem;}
+.st-key-downloads .stDownloadButton button{width:100%;font-size:.8rem;
+  padding:.35rem .7rem;border-radius:7px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);}
+.st-key-downloads .stDownloadButton button:hover{border-color:var(--ink-3);
+  background:var(--surface-2);}
+
+@media (max-width:900px){
+  .ca-kpis{grid-template-columns:repeat(2,1fr);}
+  .ca-flow{grid-template-columns:1fr;gap:.4rem;}
+  .ca-flow > .ca-fhead, .ca-flow > div:empty{display:none;}
+  .ca-farrow{transform:rotate(90deg);padding:0;}
+  .ca-assess{grid-template-columns:1fr 1fr;}
+  .ca-change{grid-template-columns:1fr;gap:.5rem;}
+}
+</style>
+"""
+st.markdown(GOVERNANCE_CSS, unsafe_allow_html=True)
+
 # --------------------------------------------------------------------------- #
 # Data
 # --------------------------------------------------------------------------- #
@@ -351,11 +488,19 @@ def get_context():
 
 
 def column_options(graph):
-    return sorted(
-        (d["node"].name, d["node"].id)
-        for _, d in graph.nodes(data=True)
-        if d["node"].type == NodeType.COLUMN
-    )
+    """(label, node id) for every column; CDE and core-table columns are marked."""
+    out = []
+    for _, d in graph.nodes(data=True):
+        n = d["node"]
+        if n.type != NodeType.COLUMN:
+            continue
+        tags = []
+        if n.properties.get("cdes"):
+            tags.append("◆ CDE")
+        if n.properties.get("table_tier") == "core":
+            tags.append("core")
+        out.append((n.name + (f"  ·  {' · '.join(tags)}" if tags else ""), n.id))
+    return sorted(out)
 
 
 def _read_doc(path):
@@ -484,6 +629,29 @@ def _fmt_path(path, reason):
     return html.escape(reason)
 
 
+def _gov_chips(node_id):
+    if node_id not in graph.nodes:
+        return ""
+    props = graph.nodes[node_id]["node"].properties
+    chips = [f'<span class="chip cde">CDE · {html.escape(c["name"])}</span>'
+             for c in props.get("cdes", [])]
+    if props.get("criticality") == "critical":
+        chips.append('<span class="chip crit">Critical report</span>')
+    return "".join(chips)
+
+
+def _logic_panel(r):
+    """Collapsible hop-by-hop calculation logic with line numbers."""
+    if not r.evidence:
+        return ""
+    refs = [f"{e['object'].split('.')[-1]} {line_refs(e['lines'])}"
+            for e in r.evidence if e.get("lines")]
+    summary = "Calculation logic" + (
+        f' <span class="lr">{html.escape(" · ".join(refs))}</span>' if refs else "")
+    return (f'<details class="ca-logic"><summary>{summary}</summary>'
+            f'{evidence_html(r.evidence, cls="ca-code")}</details>')
+
+
 def asset_rows(results):
     rows = []
     for r in sorted(results, key=lambda r: (-r.severity.rank, r.system.value, r.asset_name)):
@@ -493,8 +661,10 @@ def asset_rows(results):
             f'<div class="ca-sev {sev}"><span class="dot {sev}"></span>{sev.upper()}</div>'
             f'<div><div class="ca-asset">{html.escape(r.asset_name)}</div>'
             f'<div class="ca-meta"><span class="chip">{html.escape(r.system.value)}</span>'
-            f'<span class="chip">{html.escape(_kind_label(r.asset_type))}</span></div>'
-            f'<div class="ca-path">{_fmt_path(r.path, r.reason)}</div></div></div>'
+            f'<span class="chip">{html.escape(_kind_label(r.asset_type))}</span>'
+            f"{_gov_chips(r.asset_id)}</div>"
+            f'<div class="ca-path">{_fmt_path(r.path, r.reason)}</div>'
+            f"{_logic_panel(r)}</div></div>"
         )
     st.markdown(
         f'<div class="ca-rows ca-anim">{"".join(rows)}</div>', unsafe_allow_html=True
@@ -557,26 +727,231 @@ def fullscreen_graph(svg, fs_key, key):
     components.html(_ESC_JS, height=0)
 
 
-def render_results(change, results, settings, key="main", offer_ai=False):
-    if not results:
-        st.markdown(
-            '<div class="ca-safe ca-anim"><span class="dot safe" style="margin-top:.42rem"></span>'
-            '<div><div class="ca-safe-t">No downstream dependents found</div>'
-            '<div class="ca-safe-d">Nothing in the analysed Databricks or Tableau scope '
-            "reads this object. Safe to deploy.</div></div></div>",
-            unsafe_allow_html=True,
-        )
-        return
+# --------------------------------------------------------------------------- #
+# Governance view: selected change, KPIs, layered flow, assessment
+# --------------------------------------------------------------------------- #
+_e = html.escape
 
+
+def _names(items, limit=3):
+    names = [i["label"] if "label" in i else i["name"] for i in items]
+    more = len(names) - limit
+    return " • ".join(names[:limit]) + (f" • +{more} more" if more > 0 else "")
+
+
+def _fcard(title, sub="", kicker="", cls="", tip=""):
+    return (
+        f'<div class="ca-fcard {cls}" title="{_e(tip)}">'
+        + (f'<div class="k">{_e(kicker)}</div>' if kicker else "")
+        + f'<div class="t">{_e(title)}</div>'
+        + (f'<div class="s">{_e(sub)}</div>' if sub else "")
+        + "</div>"
+    )
+
+
+def _flow_html(a):
+    L = a.layers
+    src = L["source"]
+    src_sub = ("CDE: " + ", ".join(src["cdes"])) if src["cdes"] else "Not a governed CDE"
+    col1 = _fcard(src["name"], src_sub, cls="src", tip=src["id"])
+
+    core, derived = L["data_products"]["core"], L["data_products"]["derived"]
+    col2 = ""
+    if core:
+        col2 += _fcard(f"{len(core)} core {'table' if len(core) == 1 else 'tables'}",
+                       _names(core), tip=", ".join(t["name"] for t in core))
+    if derived:
+        col2 += _fcard(f"{len(derived)} derived {'table' if len(derived) == 1 else 'tables'}",
+                       _names(derived), tip=", ".join(t["name"] for t in derived))
+    if not col2:
+        col2 = _fcard("No downstream tables", cls="muted")
+
+    rc = L["reporting_components"]
+    col3 = ""
+    if rc["semantic"]:
+        col3 += _fcard("Views and semantic fields", f"{len(rc['semantic'])} assets · "
+                       + _names(rc["semantic"], 2),
+                       tip=", ".join(i["name"] for i in rc["semantic"]))
+    cde_calcs = [c for c in rc["calculations"] if c["cdes"]]
+    for c in cde_calcs:
+        col3 += _fcard(", ".join(c["cdes"]), f"Affected CDE calculation · {c['name']}",
+                       cls="cdecalc", tip=c["id"])
+    rest = [c for c in rc["calculations"] if not c["cdes"]] + rc["worksheets"]
+    if rest:
+        col3 += _fcard("Worksheets and calculations", f"{len(rest)} assets · "
+                       + _names(rest, 2), tip=", ".join(i["name"] for i in rest))
+    if not col3:
+        col3 = _fcard("No reporting components", cls="muted")
+
+    reports = sorted(a.layers["business_reports"], key=lambda r: r["criticality"] != "critical")
+    col4 = "".join(
+        _fcard(r["name"], r["owner"], "Critical report", "critical", r["id"])
+        if r["criticality"] == "critical"
+        else _fcard(r["name"], "Standard report", "Report", tip=r["id"])
+        for r in reports
+    ) or _fcard("No business reports", cls="muted")
+
+    # Row 1 holds the layer headings and row 2 the cards, so headings line up
+    # while each column's cards stay vertically centred on the arrows.
+    heads = ["Source field", "Data products", "Reporting components", "Business report"]
+    row1 = "<div></div>".join(f'<div class="ca-fhead">{h}</div>' for h in heads)
+    row2 = '<div class="ca-farrow">→</div>'.join(
+        f'<div class="ca-fcol">{c}</div>' for c in (col1, col2, col3, col4)
+    )
+    return f'<div class="ca-flow ca-anim">{row1}{row2}</div>'
+
+
+def render_downloads(change, results, a, key):
+    base = report_basename(change)
+    with st.container(key="downloads"):
+        c0, c1, c2 = st.columns([2.6, 1, 1])
+        with c0:
+            st.markdown('<div class="ca-change-l" style="padding-top:.55rem">'
+                        "Download report</div>", unsafe_allow_html=True)
+        with c1:
+            engine = pdf_engine()
+            # Deferred: the PDF is rendered only when the button is clicked,
+            # not on every rerun of the page.
+            st.download_button("Report (PDF)", lambda: report_pdf(change, results, a),
+                               file_name=f"{base}.pdf", mime="application/pdf",
+                               icon=":material/picture_as_pdf:", key=f"dl_pdf_{key}",
+                               on_click="ignore", width="stretch", disabled=engine is None,
+                               help=("Governance assessment, flow and line-numbered "
+                                     f"calculation logic (rendered with {engine})"
+                                     if engine else "Install weasyprint or xhtml2pdf "
+                                                    "to enable PDF reports"))
+        with c2:
+            st.download_button("Assets (CSV)", results_csv(results, a),
+                               file_name=f"{base}.csv", mime="text/csv",
+                               icon=":material/table_view:", key=f"dl_csv_{key}",
+                               on_click="ignore", width="stretch")
+
+
+def render_table_logic(a):
+    tables = [t for t in a.downstream_tables if t.get("logic")]
+    if not tables:
+        return
+    label("Data product logic")
+    rows = "".join(
+        f'<div class="ca-tlogic"><details class="ca-logic"><summary>'
+        f'<span class="tn">{_e(t["label"])}</span> {_e(t["tier"])}'
+        f' <span class="lr">{_e(line_refs(t["logic"]["lines"]))}</span></summary>'
+        f'{code_block_html(t["logic"]["code"], t["logic"]["lines"], "ca-code")}'
+        "</details></div>"
+        for t in tables
+    )
+    st.markdown(f'<div class="ca-anim">{rows}</div>', unsafe_allow_html=True)
+
+
+def render_governance(change, a, results=(), key="main"):
+    rating = a.rating.value
+    obj = change.target_node_id.split(":")[-1]
+    cde_chip = "".join(f'<span class="chip cde">CDE · {_e(c["name"])}</span>'
+                       for c in a.source_cdes)
+    st.markdown(
+        '<div class="ca-change ca-anim">'
+        '<div class="ca-change-l">Selected change</div>'
+        f'<div class="ca-change-v">{_e(change.change_type.value)} '
+        f'{_e(obj.split(".")[-1])} <small>{_e(obj)}</small>{cde_chip}</div>'
+        f'<span class="ca-pill {rating}">{rating} impact</span>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    k = a.kpis
+    cde_sub = " + ".join(c["name"] for c in a.cdes).capitalize() if a.cdes \
+        else "No CDEs touched"
+    tiles = [
+        (k["cdes"], "Critical data elements", cde_sub),
+        (k["downstream_tables"], "Downstream tables",
+         "Tables affected by the field change" if k["downstream_tables"]
+         else "No tables derive from the field"),
+        (k["core_tables"], "Core tables",
+         f"Included in the {k['downstream_tables']} downstream tables"
+         if k["downstream_tables"] else "No downstream tables"),
+        (k["critical_reports"], "Critical report" if k["critical_reports"] == 1
+         else "Critical reports",
+         ", ".join(r["name"] for r in a.critical_reports) or "None classified critical"),
+    ]
+    st.markdown(
+        '<div class="ca-kpis ca-anim" style="margin-top:.75rem">'
+        + "".join(
+            f'<div class="ca-kpi"><div class="ca-kpi-h"><span class="ca-kpi-n">{n}</span>'
+            f'<span class="ca-kpi-t">{_e(t)}</span></div>'
+            f'<div class="ca-kpi-s">{_e(sub)}</div></div>'
+            for n, t, sub in tiles
+        )
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div style="height:.7rem"></div>', unsafe_allow_html=True)
+    render_downloads(change, list(results), a, key)
+
+    label("Downstream impact")
+    st.markdown(_flow_html(a), unsafe_allow_html=True)
+    render_table_logic(a)
+
+    label("Impact assessment")
+    dims = "".join(
+        f'<div><div class="ca-dim-n"><span class="dot {"breaking" if d["flagged"] else "safe"}">'
+        f'</span>{_e(d["name"])}</div><div class="ca-dim-d">{_e(d["detail"])}</div></div>'
+        for d in a.dimensions
+    )
+    prov = ", ".join(f"{a.provenance[s]} {PROVENANCE_LABEL[s]}"
+                     for s in PROVENANCE_LABEL if a.provenance.get(s))
+    owners = (f'<div class="ca-focus"><b>Consult:</b> {_e("; ".join(a.owners))}</div>'
+              if a.owners else "")
+    st.markdown(
+        '<div class="ca-assess ca-anim">'
+        f'<div><div class="ca-rt {rating}">{rating} impact</div>'
+        '<div class="ca-rs">Rule-based governance assessment</div></div>'
+        f"{dims}</div>"
+        f'<div class="ca-focus"><b>Review focus:</b> {_e(a.review_focus)}</div>'
+        f"{owners}"
+        '<div class="ca-foot">Core tables are a subset of downstream tables; a CDE may span '
+        "multiple assets. Classifications come from the governance overlay, then Unity "
+        f"Catalog tags, then lineage inference{(' (' + _e(prov) + ')') if prov else ''}.</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_results(change, results, settings, key="main", offer_ai=False,
+                   assessment=None):
     open_key, fs_key = f"open_{key}", f"fs_{key}"
 
     # Full screen short-circuits the whole page: graph only, nothing else.
-    if st.session_state.get(fs_key):
+    if results and st.session_state.get(fs_key):
         sel = st.session_state.get(open_key)
         fullscreen_graph(
             graph_svg(results, sel if sel not in ("unset", "closed") else None),
             fs_key,
             key,
+        )
+        return
+
+    if assessment is None:
+        assessment = assess_impact(graph, change, results)
+    render_governance(change, assessment, results, key)
+
+    if not results:
+        if assessment.source_cdes or assessment.downstream_tables:
+            title = "No reporting consumers found"
+            detail = ("No view, query or Tableau asset reads this object, but it is "
+                      "governed or feeds downstream tables. Follow the review focus above "
+                      "before deploying.")
+            dot = "warning"
+        else:
+            title = "No downstream dependents found"
+            detail = ("Nothing in the analysed Databricks or Tableau scope reads this "
+                      "object. Safe to deploy.")
+            dot = "safe"
+        st.markdown('<div style="height:1rem"></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="ca-safe ca-anim"><span class="dot {dot}" style="margin-top:.42rem"></span>'
+            f'<div><div class="ca-safe-t">{title}</div>'
+            f'<div class="ca-safe-d">{detail}</div></div></div>',
+            unsafe_allow_html=True,
         )
         return
 
@@ -614,7 +989,7 @@ def render_results(change, results, settings, key="main", offer_ai=False):
             unsafe_allow_html=True,
         )
     elif opened != "closed":
-        label("Dependency paths")
+        label("Dependency paths (detail)")
         svg = graph_svg(results, opened)
         # The container itself is the canvas, so the control is a child of it
         # rather than a sibling positioned against a different box.
@@ -691,6 +1066,8 @@ with st.sidebar:
         f'<div class="ca-kv"><span>Mode</span><span class="ca-mode">{html.escape(settings.mode)}</span></div>'
         f'<div class="ca-kv"><span>Assets</span><b>{graph.number_of_nodes()}</b></div>'
         f'<div class="ca-kv"><span>Dependencies</span><b>{graph.number_of_edges()}</b></div>'
+        f'<div class="ca-kv"><span>Critical data elements</span>'
+        f'<b>{len(graph.graph["governance"].cdes) if "governance" in graph.graph else 0}</b></div>'
         "</div>",
         unsafe_allow_html=True,
     )
@@ -701,14 +1078,17 @@ with st.sidebar:
 if page == "Propose Change":
     st.markdown(
         '<div class="ca-title">Propose a change</div>'
-        '<div class="ca-sub">Select a column and a change type to see everything downstream '
-        "that depends on it, before you deploy.</div>",
+        '<div class="ca-sub">Select a column and a change type to trace it through data '
+        "products to critical business reporting, before you deploy. "
+        "◆ marks critical data elements.</div>",
         unsafe_allow_html=True,
     )
 
     opts = column_options(graph)
     labels = [c[0] for c in opts]
-    default = labels.index("policies.policy_status") if "policies.policy_status" in labels else 0
+    ids = [c[1] for c in opts]
+    default_id = "db:column:insurance.policy.policies.policy_status"
+    default = ids.index(default_id) if default_id in ids else 0
 
     c1, c2, c3 = st.columns([2.4, 1.6, 1])
     with c1:

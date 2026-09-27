@@ -62,77 +62,181 @@
         {"name": "line_of_business", "type": "string"},
         {"name": "is_active", "type": "boolean"}
       ]
+    },
+    {
+      "name": "policy_master",
+      "type": "TABLE",
+      "tags": {"data_tier": "core", "data_owner": "uc-policy-ops"},
+      "definition": "SELECT\n  p.policy_id,\n  UPPER(TRIM(p.policy_status)) AS policy_status,\n  p.customer_id,\n  p.product_code,\n  p.effective_date,\n  p.expiry_date\nFROM insurance.policy.policies AS p\nWHERE p.policy_id IS NOT NULL",
+      "columns": [
+        {"name": "policy_id", "type": "string"},
+        {"name": "policy_status", "type": "string"},
+        {"name": "customer_id", "type": "string"},
+        {"name": "product_code", "type": "string"},
+        {"name": "effective_date", "type": "date"},
+        {"name": "expiry_date", "type": "date"}
+      ]
+    },
+    {
+      "name": "policy_term",
+      "type": "TABLE",
+      "tags": {"data_tier": "core"},
+      "definition": "SELECT\n  p.policy_id,\n  ROW_NUMBER() OVER (PARTITION BY p.policy_id ORDER BY p.effective_date) AS term_number,\n  CASE\n    WHEN p.policy_status IN ('ACTIVE', 'RENEWED') THEN 'IN_FORCE'\n    ELSE p.policy_status\n  END AS term_status,\n  p.effective_date AS term_start,\n  p.expiry_date AS term_end\nFROM insurance.policy.policies AS p",
+      "columns": [
+        {"name": "policy_id", "type": "string"},
+        {"name": "term_number", "type": "int"},
+        {"name": "term_status", "type": "string", "tags": {"cde": "Policy status"}},
+        {"name": "term_start", "type": "date"},
+        {"name": "term_end", "type": "date"}
+      ]
+    },
+    {
+      "name": "policy_status_daily",
+      "type": "TABLE",
+      "definition": "SELECT\n  CURRENT_DATE() AS snapshot_date,\n  m.policy_id,\n  m.policy_status\nFROM insurance.policy.policy_master AS m",
+      "columns": [
+        {"name": "snapshot_date", "type": "date"},
+        {"name": "policy_id", "type": "string"},
+        {"name": "policy_status", "type": "string"}
+      ]
+    },
+    {
+      "name": "policy_status_history",
+      "type": "TABLE",
+      "definition": "SELECT\n  m.policy_id,\n  LAG(m.policy_status) OVER (PARTITION BY m.policy_id ORDER BY m.effective_date) AS status_from,\n  m.policy_status AS status_to,\n  CURRENT_TIMESTAMP() AS changed_at\nFROM insurance.policy.policy_master AS m",
+      "columns": [
+        {"name": "policy_id", "type": "string"},
+        {"name": "status_from", "type": "string"},
+        {"name": "status_to", "type": "string"},
+        {"name": "changed_at", "type": "timestamp"}
+      ]
+    },
+    {
+      "name": "policy_lapse_summary",
+      "type": "TABLE",
+      "definition": "SELECT\n  DATE_TRUNC('MONTH', h.changed_at) AS month,\n  COUNT_IF(h.status_to = 'LAPSED') AS lapsed_count,\n  COUNT_IF(h.status_to = 'LAPSED') / COUNT(*) AS lapse_rate\nFROM insurance.policy.policy_status_history AS h\nGROUP BY 1",
+      "columns": [
+        {"name": "month", "type": "date"},
+        {"name": "lapsed_count", "type": "bigint"},
+        {"name": "lapse_rate", "type": "double"}
+      ]
+    },
+    {
+      "name": "renewal_eligibility",
+      "type": "TABLE",
+      "definition": "SELECT\n  t.policy_id,\n  CASE\n    WHEN m.policy_status <> 'ACTIVE' THEN FALSE\n    WHEN t.term_status <> 'IN_FORCE' THEN FALSE\n    WHEN DATEDIFF(t.term_end, CURRENT_DATE()) > 90 THEN FALSE\n    ELSE TRUE\n  END AS is_eligible,\n  CASE\n    WHEN t.term_status <> 'IN_FORCE' THEN 'Term not in force'\n  END AS eligibility_reason,\n  CURRENT_TIMESTAMP() AS evaluated_at\nFROM insurance.policy.policy_term AS t\nJOIN insurance.policy.policy_master AS m\n  ON t.policy_id = m.policy_id",
+      "columns": [
+        {"name": "policy_id", "type": "string"},
+        {"name": "is_eligible", "type": "boolean"},
+        {"name": "eligibility_reason", "type": "string"},
+        {"name": "evaluated_at", "type": "timestamp"}
+      ]
+    },
+    {
+      "name": "renewal_candidates",
+      "type": "TABLE",
+      "definition": "SELECT\n  e.policy_id,\n  t.term_end AS renewal_due_date,\n  e.is_eligible\nFROM insurance.policy.renewal_eligibility AS e\nJOIN insurance.policy.policy_term AS t\n  ON e.policy_id = t.policy_id\nWHERE e.is_eligible",
+      "columns": [
+        {"name": "policy_id", "type": "string"},
+        {"name": "renewal_due_date", "type": "date"},
+        {"name": "is_eligible", "type": "boolean"}
+      ]
+    },
+    {
+      "name": "policy_retention_metrics",
+      "type": "TABLE",
+      "definition": "SELECT\n  DATE_TRUNC('MONTH', c.renewal_due_date) AS month,\n  COUNT_IF(c.is_eligible) AS retained_count,\n  AVG(CASE WHEN h.status_to = 'RENEWED' THEN 1 ELSE 0 END) AS retention_rate\nFROM insurance.policy.renewal_candidates AS c\nLEFT JOIN insurance.policy.policy_status_history AS h\n  ON c.policy_id = h.policy_id\nGROUP BY 1",
+      "columns": [
+        {"name": "month", "type": "date"},
+        {"name": "retained_count", "type": "bigint"},
+        {"name": "retention_rate", "type": "double"}
+      ]
     }
   ],
   "views": [
     {
       "name": "vw_active_policies",
-      "sql": "SELECT policy_id, policy_status, premium_amount FROM insurance.policy.policies WHERE policy_status = 'ACTIVE'"
+      "sql": "SELECT\n  policy_id,\n  policy_status,\n  premium_amount\nFROM insurance.policy.policies\nWHERE\n  policy_status = 'ACTIVE'"
     },
     {
       "name": "vw_policy_summary",
-      "sql": "SELECT p.policy_id, p.policy_status, COUNT(c.claim_id) AS claim_count FROM insurance.policy.policies p LEFT JOIN insurance.policy.claims c ON p.policy_id = c.policy_id GROUP BY p.policy_id, p.policy_status"
+      "sql": "SELECT\n  p.policy_id,\n  p.policy_status,\n  COUNT(c.claim_id) AS claim_count\nFROM insurance.policy.policies AS p\nLEFT JOIN insurance.policy.claims AS c\n  ON p.policy_id = c.policy_id\nGROUP BY\n  p.policy_id,\n  p.policy_status"
     },
     {
       "name": "vw_claims_by_policy",
-      "sql": "SELECT c.claim_id, c.policy_id, c.claim_amount FROM insurance.policy.claims c"
+      "sql": "SELECT\n  c.claim_id,\n  c.policy_id,\n  c.claim_amount\nFROM insurance.policy.claims AS c"
     },
     {
       "name": "vw_open_claims",
-      "sql": "SELECT c.claim_id, c.policy_id, c.claim_amount, c.claim_status, c.claim_date FROM insurance.policy.claims c WHERE c.claim_status IN ('OPEN', 'PENDING')"
+      "sql": "SELECT\n  c.claim_id,\n  c.policy_id,\n  c.claim_amount,\n  c.claim_status,\n  c.claim_date\nFROM insurance.policy.claims AS c\nWHERE\n  c.claim_status IN ('OPEN', 'PENDING')"
     },
     {
       "name": "vw_policy_revenue",
-      "sql": "SELECT p.policy_id, p.premium_amount, SUM(pay.payment_amount) AS collected FROM insurance.policy.policies p LEFT JOIN insurance.policy.payments pay ON p.policy_id = pay.policy_id GROUP BY p.policy_id, p.premium_amount"
+      "sql": "SELECT\n  p.policy_id,\n  p.premium_amount,\n  SUM(pay.payment_amount) AS collected\nFROM insurance.policy.policies AS p\nLEFT JOIN insurance.policy.payments AS pay\n  ON p.policy_id = pay.policy_id\nGROUP BY\n  p.policy_id,\n  p.premium_amount"
     },
     {
       "name": "vw_agent_performance",
-      "sql": "SELECT a.agent_id, a.agent_name, a.region, SUM(p.premium_amount) AS written_premium FROM insurance.policy.policies p JOIN insurance.policy.agents a ON p.agent_id = a.agent_id GROUP BY a.agent_id, a.agent_name, a.region"
+      "sql": "SELECT\n  a.agent_id,\n  a.agent_name,\n  a.region,\n  SUM(p.premium_amount) AS written_premium\nFROM insurance.policy.policies AS p\nJOIN insurance.policy.agents AS a\n  ON p.agent_id = a.agent_id\nGROUP BY\n  a.agent_id,\n  a.agent_name,\n  a.region"
     },
     {
       "name": "vw_product_mix",
-      "sql": "SELECT pr.line_of_business, pr.product_name, COUNT(p.policy_id) AS policy_count FROM insurance.policy.policies p JOIN insurance.policy.products pr ON p.product_code = pr.product_code GROUP BY pr.line_of_business, pr.product_name"
+      "sql": "SELECT\n  pr.line_of_business,\n  pr.product_name,\n  COUNT(p.policy_id) AS policy_count\nFROM insurance.policy.policies AS p\nJOIN insurance.policy.products AS pr\n  ON p.product_code = pr.product_code\nGROUP BY\n  pr.line_of_business,\n  pr.product_name"
     },
     {
       "name": "vw_claims_ratio",
-      "sql": "SELECT p.policy_id, p.premium_amount, SUM(c.claim_amount) AS incurred FROM insurance.policy.policies p LEFT JOIN insurance.policy.claims c ON p.policy_id = c.policy_id GROUP BY p.policy_id, p.premium_amount"
+      "sql": "SELECT\n  p.policy_id,\n  p.premium_amount,\n  SUM(c.claim_amount) AS incurred\nFROM insurance.policy.policies AS p\nLEFT JOIN insurance.policy.claims AS c\n  ON p.policy_id = c.policy_id\nGROUP BY\n  p.policy_id,\n  p.premium_amount"
     },
     {
       "name": "vw_payment_health",
-      "sql": "SELECT pay.payment_status, pay.payment_method, COUNT(pay.payment_id) AS payments, SUM(pay.payment_amount) AS amount FROM insurance.policy.payments pay GROUP BY pay.payment_status, pay.payment_method"
+      "sql": "SELECT\n  pay.payment_status,\n  pay.payment_method,\n  COUNT(pay.payment_id) AS payments,\n  SUM(pay.payment_amount) AS amount\nFROM insurance.policy.payments AS pay\nGROUP BY\n  pay.payment_status,\n  pay.payment_method"
     }
   ],
   "queries": [
     {
       "id": "q_status_breakdown",
-      "sql": "SELECT policy_status, COUNT(*) AS policy_count FROM insurance.policy.policies GROUP BY policy_status",
+      "sql": "SELECT\n  policy_status,\n  COUNT(*) AS policy_count\nFROM insurance.policy.policies\nGROUP BY\n  policy_status",
       "source": "Tableau Server (extract refresh)"
     },
     {
       "id": "q_premium_by_month",
-      "sql": "SELECT date_trunc('month', effective_date) AS month, SUM(premium_amount) AS total_premium FROM insurance.policy.policies GROUP BY 1",
+      "sql": "SELECT\n  DATE_TRUNC('MONTH', effective_date) AS month,\n  SUM(premium_amount) AS total_premium\nFROM insurance.policy.policies\nGROUP BY\n  1",
       "source": "Tableau Server (extract refresh)"
     },
     {
       "id": "q_claims_by_loss_type",
-      "sql": "SELECT c.loss_type, COUNT(c.claim_id) AS claims, SUM(c.claim_amount) AS amount FROM insurance.policy.claims c GROUP BY c.loss_type",
+      "sql": "SELECT\n  c.loss_type,\n  COUNT(c.claim_id) AS claims,\n  SUM(c.claim_amount) AS amount\nFROM insurance.policy.claims AS c\nGROUP BY\n  c.loss_type",
       "source": "Tableau Server (extract refresh)"
     },
     {
       "id": "q_agent_leaderboard",
-      "sql": "SELECT a.agent_name, a.channel, SUM(p.premium_amount) AS premium FROM insurance.policy.policies p JOIN insurance.policy.agents a ON p.agent_id = a.agent_id GROUP BY a.agent_name, a.channel",
+      "sql": "SELECT\n  a.agent_name,\n  a.channel,\n  SUM(p.premium_amount) AS premium\nFROM insurance.policy.policies AS p\nJOIN insurance.policy.agents AS a\n  ON p.agent_id = a.agent_id\nGROUP BY\n  a.agent_name,\n  a.channel",
       "source": "Databricks SQL Warehouse (scheduled)"
     },
     {
       "id": "q_payment_method_mix",
-      "sql": "SELECT pay.payment_method, COUNT(pay.payment_id) AS payments FROM insurance.policy.payments pay GROUP BY pay.payment_method",
+      "sql": "SELECT\n  pay.payment_method,\n  COUNT(pay.payment_id) AS payments\nFROM insurance.policy.payments AS pay\nGROUP BY\n  pay.payment_method",
       "source": "Tableau Server (extract refresh)"
     },
     {
       "id": "q_product_performance",
-      "sql": "SELECT pr.product_name, SUM(p.premium_amount) AS premium FROM insurance.policy.policies p JOIN insurance.policy.products pr ON p.product_code = pr.product_code GROUP BY pr.product_name",
+      "sql": "SELECT\n  pr.product_name,\n  SUM(p.premium_amount) AS premium\nFROM insurance.policy.policies AS p\nJOIN insurance.policy.products AS pr\n  ON p.product_code = pr.product_code\nGROUP BY\n  pr.product_name",
       "source": "Databricks SQL Warehouse (scheduled)"
     }
   ],
-  "column_lineage": []
+  "column_lineage": [
+    {"source": "insurance.policy.policies.policy_status", "target": "insurance.policy.policy_master.policy_status"},
+    {"source": "insurance.policy.policies.policy_status", "target": "insurance.policy.policy_term.term_status"},
+    {"source": "insurance.policy.policy_master.policy_status", "target": "insurance.policy.policy_status_daily.policy_status"},
+    {"source": "insurance.policy.policy_master.policy_status", "target": "insurance.policy.policy_status_history.status_from"},
+    {"source": "insurance.policy.policy_master.policy_status", "target": "insurance.policy.policy_status_history.status_to"},
+    {"source": "insurance.policy.policy_status_history.status_to", "target": "insurance.policy.policy_lapse_summary.lapsed_count"},
+    {"source": "insurance.policy.policy_status_history.status_to", "target": "insurance.policy.policy_lapse_summary.lapse_rate"},
+    {"source": "insurance.policy.policy_master.policy_status", "target": "insurance.policy.renewal_eligibility.is_eligible"},
+    {"source": "insurance.policy.policy_term.term_status", "target": "insurance.policy.renewal_eligibility.is_eligible"},
+    {"source": "insurance.policy.policy_term.term_status", "target": "insurance.policy.renewal_eligibility.eligibility_reason"},
+    {"source": "insurance.policy.renewal_eligibility.is_eligible", "target": "insurance.policy.renewal_candidates.is_eligible"},
+    {"source": "insurance.policy.policy_term.term_end", "target": "insurance.policy.renewal_candidates.renewal_due_date"},
+    {"source": "insurance.policy.renewal_candidates.is_eligible", "target": "insurance.policy.policy_retention_metrics.retained_count"},
+    {"source": "insurance.policy.policy_status_history.status_to", "target": "insurance.policy.policy_retention_metrics.retention_rate"}
+  ]
 }

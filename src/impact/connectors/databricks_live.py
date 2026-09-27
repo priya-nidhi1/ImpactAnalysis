@@ -90,6 +90,7 @@ class DatabricksLiveConnector(Connector):
 
         view_names = {v["name"] for v in views}
         tables = [v for k, v in by_table.items() if k not in view_names]
+        self._attach_tags(catalog, schema, tables)
 
         return {
             "catalog": catalog,
@@ -99,6 +100,39 @@ class DatabricksLiveConnector(Connector):
             "queries": queries,
             "column_lineage": self._column_lineage(catalog, schema),
         }
+
+    def _attach_tags(self, catalog: str, schema: str,
+                     tables: List[Dict[str, Any]]) -> None:
+        """Attach Unity Catalog governance tags (cde, data_tier, ...) in place."""
+        ns = f"{catalog}.information_schema"
+        try:
+            ttags = self._sql(
+                f"""
+                SELECT table_name, tag_name, tag_value FROM {ns}.table_tags
+                WHERE catalog_name = '{catalog}' AND schema_name = '{schema}'
+                """
+            )
+            ctags = self._sql(
+                f"""
+                SELECT table_name, column_name, tag_name, tag_value
+                FROM {ns}.column_tags
+                WHERE catalog_name = '{catalog}' AND schema_name = '{schema}'
+                """
+            )
+        except Exception:
+            return  # tags are optional; the governance overlay still applies
+        by_name = {t["name"]: t for t in tables}
+        for r in ttags:
+            t = by_name.get(r["table_name"])
+            if t is not None:
+                t.setdefault("tags", {})[r["tag_name"]] = r.get("tag_value") or ""
+        for r in ctags:
+            t = by_name.get(r["table_name"])
+            if t is None:
+                continue
+            for c in t["columns"]:
+                if c["name"] == r["column_name"]:
+                    c.setdefault("tags", {})[r["tag_name"]] = r.get("tag_value") or ""
 
     def _column_lineage(self, catalog: str, schema: str) -> List[Dict[str, str]]:
         try:

@@ -43,6 +43,10 @@ class Settings:
     data_dir: str = ".data"                     # local JSON store dir
     fixtures_dir: str = "fixtures"
 
+    # Governance overlay (CDEs, table tiers, report criticality). Takes
+    # precedence over Unity Catalog tags; see impact.governance.load.
+    governance_overlay: Optional[str] = "fixtures/governance/catalog.json"
+
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -53,6 +57,13 @@ class Settings:
     @property
     def fixtures_path(self) -> Path:
         p = Path(self.fixtures_dir)
+        return p if p.is_absolute() else project_root() / p
+
+    @property
+    def governance_overlay_path(self) -> Optional[Path]:
+        if not self.governance_overlay:
+            return None
+        p = Path(self.governance_overlay)
         return p if p.is_absolute() else project_root() / p
 
 
@@ -82,6 +93,8 @@ def load_settings(path: Optional[str] = None) -> Settings:
         metadata_schema=storage.get("metadata_schema", "impact_analysis"),
         data_dir=storage.get("data_dir", ".data"),
         fixtures_dir=data.get("fixtures_dir", "fixtures"),
+        governance_overlay=(data.get("governance", {}) or {}).get(
+            "overlay", "fixtures/governance/catalog.json"),
         raw=data,
     )
     return settings

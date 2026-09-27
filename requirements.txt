@@ -9,5 +9,10 @@ databricks-sdk>=0.30.0
 tableauserverclient>=0.30
 
 # UI (Databricks App)
-streamlit>=1.36
+streamlit>=1.64         # deferred download_button data (tested with 1.64)
+
+# PDF impact report: WeasyPrint when the Pango system library is present,
+# otherwise the pure-Python xhtml2pdf fallback (see src/impact/report_pdf.py)
+weasyprint>=62
+xhtml2pdf>=0.2.16
 pyvis>=0.3.2

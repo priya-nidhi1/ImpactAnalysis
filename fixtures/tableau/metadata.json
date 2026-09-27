@@ -8,12 +8,14 @@
         {"name": "Policy Id", "upstreamColumns": [{"table": "insurance.policy.policies", "name": "policy_id"}]},
         {"name": "Effective Date", "upstreamColumns": [{"table": "insurance.policy.policies", "name": "effective_date"}]},
         {"name": "Expiry Date", "upstreamColumns": [{"table": "insurance.policy.policies", "name": "expiry_date"}]},
-        {"name": "Product Code", "upstreamColumns": [{"table": "insurance.policy.policies", "name": "product_code"}]}
+        {"name": "Product Code", "upstreamColumns": [{"table": "insurance.policy.policies", "name": "product_code"}]},
+        {"name": "Renewal Eligibility", "upstreamColumns": [{"table": "insurance.policy.renewal_eligibility", "name": "is_eligible"}]}
       ],
       "calculatedFields": [
         {"name": "Active Flag", "formula": "IF [Policy Status] = \"ACTIVE\" THEN 1 ELSE 0 END"},
         {"name": "Status Label", "formula": "UPPER([Policy Status])"},
-        {"name": "Days To Expiry", "formula": "DATEDIFF('day', TODAY(), [Expiry Date])"}
+        {"name": "Days To Expiry", "formula": "DATEDIFF('day', TODAY(), [Expiry Date])"},
+        {"name": "Renewal Eligible Flag", "formula": "IF [Renewal Eligibility] THEN 1 ELSE 0 END"}
       ]
     },
     {
@@ -60,7 +62,7 @@
       "worksheets": [
         {"name": "Status Breakdown", "datasource": "Policy Analytics", "fields": ["Policy Status", "Active Flag"]},
         {"name": "Premium Trend", "datasource": "Policy Analytics", "fields": ["Premium Amount", "Effective Date"]},
-        {"name": "Renewal Pipeline", "datasource": "Policy Analytics", "fields": ["Expiry Date", "Days To Expiry", "Policy Status"]}
+        {"name": "Renewal Pipeline", "datasource": "Policy Analytics", "fields": ["Expiry Date", "Days To Expiry", "Policy Status", "Renewal Eligibility", "Renewal Eligible Flag"]}
       ],
       "dashboards": [
         {"name": "Executive Policy Dashboard", "worksheets": ["Status Breakdown", "Premium Trend", "Renewal Pipeline"]}
