@@ -10,10 +10,11 @@ This module is the source of truth: the LLM layer only phrases these results.
 from __future__ import annotations
 
 from collections import deque
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import networkx as nx
 
+from ..evidence import trace_evidence
 from ..model import (
     ChangeRequest,
     ChangeType,
@@ -74,13 +75,14 @@ def _build_path(
     return parts
 
 
-def analyze_change(g: nx.DiGraph, change: ChangeRequest) -> List[ImpactResult]:
-    start = change.target_node_id
-    if start not in g.nodes:
-        # ADD of a brand-new column legitimately has no existing dependents.
-        return []
+def downstream_reach(
+    g: nx.DiGraph, start: str
+) -> Tuple[Dict[str, Optional[str]], List[str]]:
+    """BFS over producer -> consumer edges from ``start``.
 
-    # BFS over directed edges, tracking predecessors for path reconstruction.
+    Returns the predecessor map (for path reconstruction) and every reached
+    node id in visit order, including structural nodes such as columns.
+    """
     preds: Dict[str, Optional[str]] = {start: None}
     order: List[str] = []
     q = deque([start])
@@ -91,6 +93,16 @@ def analyze_change(g: nx.DiGraph, change: ChangeRequest) -> List[ImpactResult]:
                 preds[succ] = cur
                 order.append(succ)
                 q.append(succ)
+    return preds, order
+
+
+def analyze_change(g: nx.DiGraph, change: ChangeRequest) -> List[ImpactResult]:
+    start = change.target_node_id
+    if start not in g.nodes:
+        # ADD of a brand-new column legitimately has no existing dependents.
+        return []
+
+    preds, order = downstream_reach(g, start)
 
     results: List[ImpactResult] = []
     for nid in order:
@@ -108,6 +120,7 @@ def analyze_change(g: nx.DiGraph, change: ChangeRequest) -> List[ImpactResult]:
                 severity=severity,
                 reason=" ".join(path),
                 path=path,
+                evidence=trace_evidence(g, preds, nid),
             )
         )
 

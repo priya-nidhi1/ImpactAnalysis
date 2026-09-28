@@ -18,13 +18,30 @@ from .extract import (
     extract_tableau,
     schema_map_from_raw,
 )
+from .governance import (
+    GovernanceCatalog,
+    apply_governance,
+    assess_impact,
+    load_governance,
+)
 from .graph import analyze_change, build_graph
-from .model import ChangeRequest, Edge, ImpactResult, Node
+from .model import ChangeRequest, Edge, ImpactAssessment, ImpactResult, Node
 from .store import MetadataStore, get_store
 
 
 def extract_all(settings: Settings) -> Tuple[List[Node], List[Edge]]:
-    """Pull metadata from the active connector and normalize to nodes/edges."""
+    """Pull metadata from the active connector and normalize to nodes/edges.
+
+    Nodes come back enriched with governance attributes (CDEs, tier,
+    criticality, owner) — see :mod:`impact.governance`.
+    """
+    nodes, edges, _ = _extract(settings)
+    return nodes, edges
+
+
+def _extract(
+    settings: Settings,
+) -> Tuple[List[Node], List[Edge], GovernanceCatalog]:
     connector = get_connector(settings)
     db_raw = connector.get_databricks_metadata()
     tab_raw = connector.get_tableau_metadata()
@@ -50,7 +67,15 @@ def extract_all(settings: Settings) -> Tuple[List[Node], List[Edge]]:
     nodes += n3
     edges += e3
 
-    return _dedupe_nodes(nodes), edges
+    nodes = _dedupe_nodes(nodes)
+    catalog = load_governance(settings, db_raw, tab_raw, edges)
+    apply_governance(nodes, catalog)
+    return nodes, edges, catalog
+
+
+def load_catalog(settings: Optional[Settings] = None) -> GovernanceCatalog:
+    """Governance catalog (overlay + UC tags + inferred tiers) for the scope."""
+    return _extract(settings or load_settings())[2]
 
 
 def _dedupe_nodes(nodes: List[Node]) -> List[Node]:
@@ -108,8 +133,10 @@ def load_graph(
 def build_graph_in_memory(settings: Optional[Settings] = None) -> nx.DiGraph:
     """Extract and build a graph without touching storage (app/tests)."""
     settings = settings or load_settings()
-    nodes, edges = extract_all(settings)
-    return build_graph(nodes, edges)
+    nodes, edges, catalog = _extract(settings)
+    g = build_graph(nodes, edges)
+    g.graph["governance"] = catalog
+    return g
 
 
 def analyze(
@@ -127,3 +154,22 @@ def analyze(
         store.write_records("change_requests", [change.to_dict()])
         store.write_records("impact_results", [r.to_dict() for r in results])
     return results
+
+
+def analyze_with_governance(
+    change: ChangeRequest,
+    settings: Optional[Settings] = None,
+    graph: Optional[nx.DiGraph] = None,
+    store: Optional[MetadataStore] = None,
+    persist: bool = False,
+) -> Tuple[List[ImpactResult], ImpactAssessment]:
+    """Per-asset impact plus the governance roll-up (CDEs, core data, reports)."""
+    settings = settings or load_settings()
+    graph = graph if graph is not None else build_graph_in_memory(settings)
+    results = analyze(change, settings=settings, graph=graph, store=store,
+                      persist=persist)
+    assessment = assess_impact(graph, change, results)
+    if persist:
+        store = store or get_store(settings)
+        store.write_records("impact_assessments", [assessment.to_dict()])
+    return results, assessment

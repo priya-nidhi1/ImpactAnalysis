@@ -65,6 +65,14 @@ class Severity(str, enum.Enum):
         return {"breaking": 3, "warning": 2, "info": 1}[self.value]
 
 
+class ImpactRating(str, enum.Enum):
+    """Overall governance rating for a change (see ``impact.governance``)."""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
 # --------------------------------------------------------------------------- #
 # Records
 # --------------------------------------------------------------------------- #
@@ -138,12 +146,60 @@ class ImpactResult:
     severity: Severity
     reason: str
     path: List[str] = field(default_factory=list)
+    # Hop-by-hop code evidence (SQL / formula + line numbers); see impact.evidence
+    evidence: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["asset_type"] = self.asset_type.value
         d["system"] = self.system.value
         d["severity"] = self.severity.value
+        return d
+
+
+@dataclass
+class ImpactAssessment:
+    """Governance roll-up of a change: CDEs, core data, critical reporting.
+
+    Produced by :func:`impact.governance.assess_impact` from the same
+    downstream walk as the per-asset ``ImpactResult`` list.
+    """
+
+    change: ChangeRequest
+    source_name: str
+    source_cdes: List[Dict[str, Any]]            # CDEs bound to the changed node
+    rating: ImpactRating
+    cdes: List[Dict[str, Any]]                   # every CDE touched by the change
+    downstream_tables: List[Dict[str, Any]]      # {id, name, label, tier, source}
+    critical_reports: List[Dict[str, Any]]       # {id, name, owner}
+    layers: Dict[str, Any]                       # data_products / reporting / reports
+    dimensions: List[Dict[str, Any]]             # {name, flagged, detail}
+    review_focus: str
+    owners: List[str] = field(default_factory=list)
+    provenance: Dict[str, int] = field(default_factory=dict)
+
+    @property
+    def core_tables(self) -> List[Dict[str, Any]]:
+        return [t for t in self.downstream_tables if t.get("tier") == "core"]
+
+    @property
+    def derived_tables(self) -> List[Dict[str, Any]]:
+        return [t for t in self.downstream_tables if t.get("tier") != "core"]
+
+    @property
+    def kpis(self) -> Dict[str, int]:
+        return {
+            "cdes": len(self.cdes),
+            "downstream_tables": len(self.downstream_tables),
+            "core_tables": len(self.core_tables),
+            "critical_reports": len(self.critical_reports),
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = asdict(self)
+        d["change"] = self.change.to_dict()
+        d["rating"] = self.rating.value
+        d["kpis"] = self.kpis
         return d
 
 
