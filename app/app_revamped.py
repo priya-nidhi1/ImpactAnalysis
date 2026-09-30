@@ -339,9 +339,19 @@ st.markdown(THEME, unsafe_allow_html=True)
 GOVERNANCE_CSS = """
 <style>
 /* ---- selected-change banner ---- */
-.ca-change{display:grid;grid-template-columns:auto 1fr auto;gap:1.2rem;
-  align-items:center;border:1px solid var(--line);border-radius:10px;
-  background:var(--surface-2);padding:.85rem 1.2rem;}
+/* The header is a keyed Streamlit container so real download buttons can
+   sit inside it; [class*=] matches every per-page key (changebar_propose...). */
+[class*="st-key-changebar_"]{border:1px solid var(--line);border-radius:10px;
+  background:var(--surface-2);padding:.7rem 1rem .7rem 1.2rem;
+  animation:caIn .3s cubic-bezier(.22,.61,.36,1) both;}
+[class*="st-key-changebar_"] [data-testid="stMarkdownContainer"] p{margin:0;}
+.ca-change-l{margin-bottom:.25rem;}
+[class*="st-key-dlicons_"] .stDownloadButton button{padding:.3rem .45rem;min-height:0;
+  border-radius:7px;background:var(--surface);border:1px solid var(--line);
+  color:var(--ink-2);line-height:1;}
+[class*="st-key-dlicons_"] .stDownloadButton button:hover{border-color:var(--ink-3);
+  color:var(--ink);background:var(--surface-2);}
+[class*="st-key-dlicons_"] .stDownloadButton button:disabled{opacity:.45;}
 .ca-change-l{font-family:var(--mono);font-size:.65rem;font-weight:600;
   letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);}
 .ca-change-v{font-family:var(--mono);font-size:.95rem;font-weight:650;
@@ -443,11 +453,6 @@ table.ca-code tr.hit td.ln{color:var(--warning);font-weight:700;
 .ca-tlogic summary .tn{color:var(--ink);text-transform:none;letter-spacing:0;
   font-family:-apple-system,sans-serif;font-size:.86rem;font-weight:640;}
 .ca-tlogic table.ca-code{margin-top:.5rem;}
-.st-key-downloads .stDownloadButton button{width:100%;font-size:.8rem;
-  padding:.35rem .7rem;border-radius:7px;border:1px solid var(--line);
-  background:var(--surface);color:var(--ink);}
-.st-key-downloads .stDownloadButton button:hover{border-color:var(--ink-3);
-  background:var(--surface-2);}
 
 @media (max-width:900px){
   .ca-kpis{grid-template-columns:repeat(2,1fr);}
@@ -455,7 +460,6 @@ table.ca-code tr.hit td.ln{color:var(--warning);font-weight:700;
   .ca-flow > .ca-fhead, .ca-flow > div:empty{display:none;}
   .ca-farrow{transform:rotate(90deg);padding:0;}
   .ca-assess{grid-template-columns:1fr 1fr;}
-  .ca-change{grid-template-columns:1fr;gap:.5rem;}
 }
 </style>
 """
@@ -471,6 +475,10 @@ _DOCS = {
     "Dashboard & Integration": os.path.join(_HERE, "..", "docs", "DASHBOARD.md"),
     "Contributor Onboarding": os.path.join(_HERE, "..", "docs", "AGENT_ONBOARDING.md"),
 }
+# "Add column" is hidden from the picker for now (ChangeType.ADD still exists
+# in the engine and can come from the chat).
+PROPOSABLE_CHANGES = [ChangeType.RENAME, ChangeType.DROP, ChangeType.RETYPE,
+                      ChangeType.LOGIC]
 CHANGE_LABELS = {
     ChangeType.ADD: "Add column",
     ChangeType.DROP: "Drop column",
@@ -802,29 +810,45 @@ def _flow_html(a):
 
 
 def render_downloads(change, results, a, key):
+    """Icon-only PDF / CSV download buttons (names shown as tooltips)."""
     base = report_basename(change)
-    with st.container(key="downloads"):
-        c0, c1, c2 = st.columns([2.6, 1, 1])
-        with c0:
-            st.markdown('<div class="ca-change-l" style="padding-top:.55rem">'
-                        "Download report</div>", unsafe_allow_html=True)
-        with c1:
-            engine = pdf_engine()
-            # Deferred: the PDF is rendered only when the button is clicked,
-            # not on every rerun of the page.
-            st.download_button("Report (PDF)", lambda: report_pdf(change, results, a),
-                               file_name=f"{base}.pdf", mime="application/pdf",
-                               icon=":material/picture_as_pdf:", key=f"dl_pdf_{key}",
-                               on_click="ignore", width="stretch", disabled=engine is None,
-                               help=("Governance assessment, flow and line-numbered "
-                                     f"calculation logic (rendered with {engine})"
-                                     if engine else "Install weasyprint or xhtml2pdf "
-                                                    "to enable PDF reports"))
-        with c2:
-            st.download_button("Assets (CSV)", results_csv(results, a),
-                               file_name=f"{base}.csv", mime="text/csv",
-                               icon=":material/table_view:", key=f"dl_csv_{key}",
-                               on_click="ignore", width="stretch")
+    engine = pdf_engine()
+    # Deferred: the PDF is rendered only when the button is clicked, not on
+    # every rerun of the page.
+    st.download_button("", lambda: report_pdf(change, results, a),
+                       file_name=f"{base}.pdf", mime="application/pdf",
+                       icon=":material/picture_as_pdf:", key=f"dl_pdf_{key}",
+                       on_click="ignore", disabled=engine is None,
+                       help=("Download PDF report" if engine
+                             else "PDF unavailable: install weasyprint or xhtml2pdf"))
+    st.download_button("", results_csv(results, a),
+                       file_name=f"{base}.csv", mime="text/csv",
+                       icon=":material/table_view:", key=f"dl_csv_{key}",
+                       on_click="ignore", help="Download impacted assets (CSV)")
+
+
+def render_change_header(change, a, results, key):
+    """Selected change on the left; rating and download icons on the right."""
+    rating = a.rating.value
+    obj = change.target_node_id.split(":")[-1]
+    cde_chip = "".join(f'<span class="chip cde">CDE · {_e(c["name"])}</span>'
+                       for c in a.source_cdes)
+    with st.container(key=f"changebar_{key}"):
+        left, right = st.columns([3.2, 1.3], vertical_alignment="center")
+        with left:
+            st.markdown(
+                '<div class="ca-change-l">Selected change</div>'
+                f'<div class="ca-change-v">{_e(change.change_type.value)} '
+                f'{_e(obj.split(".")[-1])} <small>{_e(obj)}</small>{cde_chip}</div>',
+                unsafe_allow_html=True,
+            )
+        with right:
+            with st.container(horizontal=True, horizontal_alignment="right",
+                              vertical_alignment="center", gap="small",
+                              key=f"dlicons_{key}"):
+                st.markdown(f'<span class="ca-pill {rating}">{rating} impact</span>',
+                            unsafe_allow_html=True)
+                render_downloads(change, list(results), a, key)
 
 
 def render_table_logic(a):
@@ -845,18 +869,7 @@ def render_table_logic(a):
 
 def render_governance(change, a, results=(), key="main"):
     rating = a.rating.value
-    obj = change.target_node_id.split(":")[-1]
-    cde_chip = "".join(f'<span class="chip cde">CDE · {_e(c["name"])}</span>'
-                       for c in a.source_cdes)
-    st.markdown(
-        '<div class="ca-change ca-anim">'
-        '<div class="ca-change-l">Selected change</div>'
-        f'<div class="ca-change-v">{_e(change.change_type.value)} '
-        f'{_e(obj.split(".")[-1])} <small>{_e(obj)}</small>{cde_chip}</div>'
-        f'<span class="ca-pill {rating}">{rating} impact</span>'
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    render_change_header(change, a, results, key)
 
     k = a.kpis
     cde_sub = " + ".join(c["name"] for c in a.cdes).capitalize() if a.cdes \
@@ -884,9 +897,6 @@ def render_governance(change, a, results=(), key="main"):
         + "</div>",
         unsafe_allow_html=True,
     )
-
-    st.markdown('<div style="height:.7rem"></div>', unsafe_allow_html=True)
-    render_downloads(change, list(results), a, key)
 
     label("Downstream impact")
     st.markdown(_flow_html(a), unsafe_allow_html=True)
@@ -1086,36 +1096,36 @@ if page == "Propose Change":
 
     opts = column_options(graph)
     labels = [c[0] for c in opts]
-    ids = [c[1] for c in opts]
-    default_id = "db:column:insurance.policy.policies.policy_status"
-    default = ids.index(default_id) if default_id in ids else 0
 
+    # Nothing is pre-selected and nothing is analysed until the user picks a
+    # column and a change type and clicks "Analyze impact".
     c1, c2, c3 = st.columns([2.4, 1.6, 1])
     with c1:
-        picked = st.selectbox("Column", labels, index=default)
+        picked = st.selectbox("Column", labels, index=None,
+                              placeholder="Select a column")
     with c2:
         ctype_label = st.selectbox(
             "Change type",
-            [CHANGE_LABELS[c] for c in ChangeType],
-            index=list(ChangeType).index(ChangeType.RENAME),
+            [CHANGE_LABELS[c] for c in PROPOSABLE_CHANGES],
+            index=None,
+            placeholder="Select a change type",
         )
     with c3:
         st.markdown('<div style="height:1.72rem"></div>', unsafe_allow_html=True)
-        go = st.button("Analyze impact", type="primary", use_container_width=True)
-
-    ctype = next(c for c in ChangeType if CHANGE_LABELS[c] == ctype_label)
+        go = st.button("Analyze impact", type="primary", use_container_width=True,
+                       disabled=picked is None or ctype_label is None)
 
     if go:
+        ctype = next(c for c in PROPOSABLE_CHANGES if CHANGE_LABELS[c] == ctype_label)
         st.session_state["change"] = ChangeRequest(dict(opts)[picked], ctype)
         st.session_state.pop("open_propose", None)
         st.session_state.pop("fs_propose", None)
-    elif "change" not in st.session_state:
-        st.session_state["change"] = ChangeRequest(dict(opts)[picked], ctype)
 
-    change = st.session_state["change"]
-    render_results(
-        change, analyze_change(graph, change), settings, key="propose", offer_ai=True
-    )
+    change = st.session_state.get("change")
+    if change is not None:
+        render_results(
+            change, analyze_change(graph, change), settings, key="propose", offer_ai=True
+        )
 
 elif page == "Chat":
     st.markdown(
@@ -1127,19 +1137,22 @@ elif page == "Chat":
 
     q = st.text_input(
         "Question",
-        value=st.session_state.get("q", "What will be impacted if I rename policy_status?"),
+        value=st.session_state.get("q", ""),
+        placeholder="e.g. What will be impacted if I rename policy_status?",
     )
-    if st.button("Ask", type="primary") or "q" not in st.session_state:
-        st.session_state["q"] = q
+    # Analyse only after the user asks (or arrives via "Ask AI about this impact").
+    if st.button("Ask", type="primary") and q.strip():
+        st.session_state["q"] = q.strip()
 
-    change = parse_nl_change(st.session_state["q"], graph, settings)
-    if change is None:
+    asked = st.session_state.get("q")
+    change = parse_nl_change(asked, graph, settings) if asked else None
+    if asked and change is None:
         st.markdown(
             '<div class="ca-card quiet"><p>Couldn\'t identify the target column or table. '
             "Try naming it explicitly, for example <code>rename policy_status</code>.</p></div>",
             unsafe_allow_html=True,
         )
-    else:
+    elif change is not None:
         st.markdown(
             '<div class="ca-read ca-anim">Interpreted as '
             f'<b>{html.escape(change.change_type.value)}</b> on '
