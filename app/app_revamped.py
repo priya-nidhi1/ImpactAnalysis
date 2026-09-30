@@ -342,9 +342,12 @@ GOVERNANCE_CSS = """
 /* The header is a keyed Streamlit container so real download buttons can
    sit inside it; [class*=] matches every per-page key (changebar_propose...). */
 [class*="st-key-changebar_"]{border:1px solid var(--line);border-radius:10px;
-  background:var(--surface-2);padding:.7rem 1rem .7rem 1.2rem;
+  background:var(--surface-2);padding:.85rem 1rem .85rem 1.2rem;
   animation:caIn .3s cubic-bezier(.22,.61,.36,1) both;}
 [class*="st-key-changebar_"] [data-testid="stMarkdownContainer"] p{margin:0;}
+/* Streamlit gives markdown a -1rem bottom margin; inside the header that
+   pushed text into the bottom padding and knocked the pill off-centre. */
+[class*="st-key-changebar_"] [data-testid="stMarkdownContainer"]{margin-bottom:0;}
 .ca-change-l{margin-bottom:.25rem;}
 [class*="st-key-dlicons_"] .stDownloadButton button{padding:.3rem .45rem;min-height:0;
   border-radius:7px;background:var(--surface);border:1px solid var(--line);
@@ -362,7 +365,7 @@ GOVERNANCE_CSS = """
 .ca-pill{font-family:var(--mono);font-size:.66rem;font-weight:700;
   letter-spacing:.11em;text-transform:uppercase;border-radius:99px;
   padding:.28rem .7rem;border:1px solid currentColor;white-space:nowrap;
-  justify-self:start;}
+  justify-self:start;display:inline-block;line-height:1.4;vertical-align:middle;}
 .ca-pill.high,.ca-rt.high{color:var(--breaking);}
 .ca-pill.medium,.ca-rt.medium{color:var(--warning);}
 .ca-pill.low,.ca-rt.low{color:var(--safe);}
